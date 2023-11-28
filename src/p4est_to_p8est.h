@@ -617,6 +617,13 @@
 #define p4est_get_plex_data             p8est_get_plex_data
 #define p4est_get_plex_data_ext         p8est_get_plex_data_ext
 
+/* functions and types in p4est_dune */
+#define p4est_dune_numbers_t            p8est_dune_numbers_t
+#define p4est_dune_numbers_params_t     p8est_dune_numbers_params_t
+#define p4est_dune_numbers_params_default p8est_dune_numbers_params_default
+#define p4est_dune_numbers_new          p8est_dune_numbers_new
+#define p4est_dune_numbers_destroy      p8est_dune_numbers_destroy
+
 /* functions in p4est_connrefine */
 #define p4est_connectivity_refine       p8est_connectivity_refine
 
