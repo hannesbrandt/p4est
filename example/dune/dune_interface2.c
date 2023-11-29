@@ -32,19 +32,33 @@
 
 static int
 run_dune_interface (sc_MPI_Comm mpicomm,
-                    p4est_connectivity_t *conn, int maxlevel)
+                    p4est_connectivity_t * conn, int maxlevel)
 {
   p4est_t            *p4est;
+  p4est_ghost_t      *ghost;
   p4est_dune_numbers_t *dn;
+  int                 i;
 
   /* generate mesh with some arbitrary adaptive refinement */
   p4est = p4est_new_ext (mpicomm, conn, 0, 0, 1, 0, NULL, NULL);
 
   /* run refinement loop */
 
-  /* generate node numbers for dune */
-  dn = p4est_dune_numbers_new (p4est, NULL, NULL);
-  p4est_dune_numbers_destroy (dn);
+  for (i = 1; i < 2; ++i) {
+    P4EST_GLOBAL_INFOF ("DUNE mesh interface iteration %d\n", i);
+
+    /* only for globally unique numbers we provide a ghost layer */
+    ghost = !i ? NULL : p4est_ghost_new (p4est, P4EST_CONNECT_FULL);
+
+    /* generate node numbers for dune */
+    dn = p4est_dune_numbers_new (p4est, ghost, NULL);
+    p4est_dune_numbers_destroy (dn);
+
+    /* deallocate temporary structures */
+    if (ghost != NULL) {
+      p4est_ghost_destroy (ghost);
+    }
+  }
 
   /* deallocate generated mesh and return */
   p4est_destroy (p4est);
@@ -73,6 +87,7 @@ main (int argc, char **argv)
   conn = NULL;
 
   /* process command line arguments */
+  /* *INDENT-OFF* */
   progerr = 0;
   usage =
     "Arguments: <configuration> <level>\n"
@@ -83,6 +98,7 @@ main (int argc, char **argv)
     "      unit|brick|periodic|rotwrap|twocubes|rotcubes\n"
 #endif
     "   Level is the maximum depth of refinement\n";
+  /* *INDENT-ON* */
   if (!progerr && argc != 3) {
     P4EST_GLOBAL_LERROR ("Invalid command line argument count\n");
     progerr = 1;
