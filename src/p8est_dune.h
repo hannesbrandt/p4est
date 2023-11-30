@@ -25,6 +25,8 @@
 /** \file p8est_dune.h
  * Populate element corner, edge, and face numbers to interface to DUNE.
  * Depending on the invocation, they are locally or globally unique.
+ * The same number may be used for some corner, some edge and some face.
+ * Uniqueness holds among corners, separately among edges and among faces.
  */
 
 #ifndef P8EST_DUNE_H
@@ -42,12 +44,11 @@ typedef struct p8est_dune_numbers_params
 }
 p8est_dune_numbers_params_t;
 
-/** Element corner and face numbers to interface to the DUNE library.
+/** Element corner, edge and face numbers to interface to the DUNE library.
  *
- * The element corners and faces arrays hold globally unique indices
+ * The element corner, edge and face arrays hold global indices
  * that are unique within the partition among all faces, and likewise
- * unique within the partition among all corners if corner connectivity
- * has been enabled by the connect type parameter.
+ * unique within the partition among all corners, and among all edges.
  *
  * If the \ref p8est_ghost_t member to \ref p8est_dune_numbers_new has
  * been passed as NULL, then the numbers will not be globally synced.
@@ -62,6 +63,9 @@ typedef struct p8est_dune_numbers
   /** For each element corner a partition-independent global index. */
   sc_array_t         *element_corners;
 
+  /** For each element edge a partition-independent global index. */
+  sc_array_t         *element_edges;
+
   /** For each element face a partition-independent global index. */
   sc_array_t         *element_faces;
 }
@@ -74,9 +78,10 @@ p8est_dune_numbers_t;
 void                p8est_dune_numbers_params_default
   (p8est_dune_numbers_params_t * params);
 
-/** Create lookup tables for unique corners and faces.
- * Hanging corners and faces are included.
+/** Create lookup tables for unique corners, edges and faces.
+ * Hanging corners, edges and faces are included.
  * All element corner numbers are partition-independent und mutually distinct.
+ * All element edge numbers are partition-independent und mutually distinct.
  * All element face numbers are partition-independent und mutually distinct.
  * \param [in] p4est    Required input parameter is not modified.
  * \param [in] ghost    The ghost layer must match the \a p4est passed.

@@ -177,6 +177,12 @@ p4est_dune_numbers_new (p4est_t * p4est, p4est_ghost_t * ghost,
     dn->element_corners =
       sc_array_new_count (sizeof (p4est_gloidx_t), lne * P4EST_CHILDREN);
   }
+#ifdef P4_TO_P8
+  if (pa->ctype >= P8EST_CONNECT_EDGE) {
+    dn->element_edges =
+      sc_array_new_count (sizeof (p4est_gloidx_t), lne * P8EST_EDGES);
+  }
+#endif
   if (pa->ctype >= P4EST_CONNECT_FACE) {
     dn->element_faces =
       sc_array_new_count (sizeof (p4est_gloidx_t), lne * P4EST_FACES);
@@ -196,6 +202,11 @@ p4est_dune_numbers_destroy (p4est_dune_numbers_t * dn)
   if (dn->element_corners != NULL) {
     sc_array_destroy (dn->element_corners);
   }
+#ifdef P4_TO_P8
+  if (dn->element_edges != NULL) {
+    sc_array_destroy (dn->element_edges);
+  }
+#endif
   if (dn->element_faces != NULL) {
     sc_array_destroy (dn->element_faces);
   }

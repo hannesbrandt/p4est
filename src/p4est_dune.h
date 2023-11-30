@@ -25,6 +25,8 @@
 /** \file p4est_dune.h
  * Populate element corner and face number tables to interface to DUNE.
  * Depending on the invocation, they are locally or globally unique.
+ * The same number may be used for some corner and some face.
+ * Uniqueness holds among corners and separately among faces.
  */
 
 #ifndef P4EST_DUNE_H
@@ -46,8 +48,7 @@ p4est_dune_numbers_params_t;
  *
  * The element corners and faces arrays hold globally unique indices
  * that are unique within the partition among all faces, and likewise
- * unique within the partition among all corners if corner connectivity
- * has been enabled by the connect type parameter.
+ * unique within the partition among all corners.
  *
  * If the \ref p4est_ghost_t member to \ref p4est_dune_numbers_new has
  * been passed as NULL, then the numbers will not be globally synced.
