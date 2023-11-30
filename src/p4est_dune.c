@@ -40,6 +40,96 @@ static const int    corner_enode[P4EST_CHILDREN] = {
 #endif
 };
 
+#ifdef P4_TO_P8
+
+/* map element edge to element node index */
+static const int    edge_enode[P8EST_EDGES] = {
+  2, 22, 102, 122, 10, 14, 110, 114, 50, 54, 70, 74,
+};
+
+#endif
+
+/* map element face to element node index */
+static const int    face_enode[P4EST_FACES] = {
+#ifndef P4_TO_P8
+  10, 14, 2, 22
+#else
+  60, 64, 52, 72, 12, 112
+#endif
+};
+
+/* element node next to a corner c one step along a face of given normal i */
+static int
+corner_face_enode (int c, int i)
+{
+  int                 j;
+  int                 m;
+  int                 eno;
+
+  P4EST_ASSERT (0 <= c && c < P4EST_CHILDREN);
+  P4EST_ASSERT (0 <= i && i < P4EST_DIM);
+
+  /* move by one step in each tangential direction */
+  eno = corner_enode[c];
+  m = 1;
+  for (j = 0; j < P4EST_DIM; ++j) {
+    if (j != i) {
+      eno += (1 - 2 * (c & 1)) * m;
+    }
+    m *= 5;
+    c >>= 1;
+  }
+  P4EST_ASSERT (c == 0);
+
+  /* return final element node number */
+  P4EST_ASSERT (0 <= eno && eno < m);
+  return eno;
+}
+
+#ifdef P4_TO_P8
+
+/* element node next to a corner c along j and two steps along k */
+static int
+corner_twostep_enode (int c, int j, int k)
+{
+  int                 i;
+  int                 m;
+  int                 eno;
+
+  P4EST_ASSERT (0 <= c && c < P4EST_CHILDREN);
+  P4EST_ASSERT (0 <= j && j < P4EST_DIM);
+  P4EST_ASSERT ((0 <= k && k < P4EST_DIM) || k == -1);
+  P4EST_ASSERT (j != k);
+
+  /* move by one or two steps depending on direction */
+  eno = corner_enode[c];
+  m = 1;
+  for (i = 0; i < P4EST_DIM; ++i) {
+    if (i == j) {
+      eno += (1 - 2 * (c & 1)) * m;
+    }
+    else if (i == k) {
+      eno += (1 - 2 * (c & 1)) * 2 * m;
+    }
+    m *= 5;
+    c >>= 1;
+  }
+  P4EST_ASSERT (c == 0);
+
+  /* return final element node number */
+  P4EST_ASSERT (0 <= eno && eno < m);
+  return eno;
+}
+
+/* element node next to a corner c one step along a given edge j */
+static int
+corner_edge_enode (int c, int j)
+{
+  return corner_twostep_enode (c, j, -1);
+}
+
+#endif /* P4_TO_P8 */
+
 /* set default parameters */
 void
 p4est_dune_numbers_params_default (p4est_dune_numbers_params_t * params)
@@ -71,14 +161,18 @@ static void
 generate_numbers (p4est_dune_numbers_t * dn, p4est_lnodes_t * ln)
 {
   p4est_lnodes_code_t fc;
-  p4est_locidx_t      lne, e;
-  p4est_locidx_t      lni;
-  p4est_locidx_t     *eno;
-  p4est_gloidx_t     *geco;
-  int                 c;
+  p4est_locidx_t      lne, el;
+  p4est_locidx_t     *enos;
+  int                 i;
+  int                 cid, work;
+  int                 c, f;
   int                 do_c, do_f;
+  p4est_gloidx_t     *geco, *gefa;
 #ifdef P4_TO_P8
+  int                 j, k;
+  int                 e;
   int                 do_e;
+  p4est_gloidx_t     *geed;
 #endif
 
   /* basic verification of input parameters */
@@ -88,10 +182,15 @@ generate_numbers (p4est_dune_numbers_t * dn, p4est_lnodes_t * ln)
 
   /* examine which codimensions are handled */
   do_c = dn->element_corners != NULL;
+  geco = NULL;
 #ifdef P4_TO_P8
-  do_e = 0;
+  do_e = dn->element_edges != NULL;
+  geed = NULL;
 #endif
-  do_f = 0;
+  do_f = dn->element_faces != NULL;
+  gefa = NULL;
+
+  /* maybe there is nothing to do */
   if (!do_c &&
 #ifdef P4_TO_P8
       !do_e &&
@@ -103,34 +202,95 @@ generate_numbers (p4est_dune_numbers_t * dn, p4est_lnodes_t * ln)
 
   /* prepare loop over elements to assign globally unique node indices */
   lne = ln->num_local_elements;
-  eno = ln->element_nodes;
-  for (e = 0; e < lne; ++e) {
-    /* retrieve pointers to place output */
+  enos = ln->element_nodes;
+  for (el = 0; el < lne; ++el) {
+
+    /* assign standard values for an element that is not hanging anywhere */
     if (do_c) {
       geco = (p4est_gloidx_t *)
-        sc_array_index (dn->element_corners, e * P4EST_CHILDREN);
+        sc_array_index (dn->element_corners, el * P4EST_CHILDREN);
+      for (c = 0; c < P4EST_CHILDREN; ++c) {
+        /* retrieve global number of corner node */
+        geco[c] = lni_to_gni (ln, enos[corner_enode[c]]);
+      }
+    }
+#ifdef P4_TO_P8
+    if (do_e) {
+      geed = (p4est_gloidx_t *)
+        sc_array_index (dn->element_edges, el * P8EST_EDGES);
+      for (e = 0; e < P8EST_EDGES; ++e) {
+        /* retrieve global number of edge node */
+        geed[e] = lni_to_gni (ln, enos[edge_enode[e]]);
+      }
+    }
+#endif
+    if (do_f) {
+      gefa = (p4est_gloidx_t *)
+        sc_array_index (dn->element_faces, el * P4EST_FACES);
+      for (f = 0; f < P4EST_FACES; ++f) {
+        /* retrieve global number of face node */
+        gefa[f] = lni_to_gni (ln, enos[face_enode[f]]);
+      }
     }
 
-    /* check for hanging status of the element */
-    if (!(fc = ln->face_code[e])) {
-      /* the element is not the small neighbor to any other */
-      if (do_c) {
-        for (c = 0; c < P4EST_CHILDREN; ++c) {
-          /* retrieve local node number */
-          lni = eno[corner_enode[c]];
-          geco[c] = lni_to_gni (ln, lni);
+    /* modify node numbers for hanging faces and edges */
+    if (0 != (fc = ln->face_code[el])) {
+      /* element has child number cid and some hanging faces or edges */
+      cid = (fc & (P4EST_CHILDREN - 1));
+      work = (fc >> P4EST_DIM);
+
+      /* iterate over the faces adjacent to corner cid */
+      for (i = 0; i < P4EST_DIM; ++i) {
+        if (work & 1) {
+          /* face normal to direction i is hanging */
+          f = p4est_corner_faces[cid][i];
+          c = cid ^ (P4EST_CHILDREN - 1) ^ (1 << i);
+          if (do_c) {
+            /* assign to mid-face corner */
+            geco[c] = lni_to_gni (ln, enos[face_enode[f]]);
+          }
+#ifdef P4_TO_P8
+          if (do_e) {
+            /* assign to the two mid-face edges */
+            j = (i + 1) % 3;
+            k = (j + 1) % 3;
+            geed[p8est_corner_edges[c][j]] =
+              lni_to_gni (ln, enos[corner_twostep_enode (cid, j, k)]);
+            geed[p8est_corner_edges[c][k]] =
+              lni_to_gni (ln, enos[corner_twostep_enode (cid, k, j)]);
+          }
+#endif
+          if (do_f) {
+            /* assign to small mid-face */
+            gefa[f] = lni_to_gni (ln, enos[corner_face_enode (cid, i)]);
+          }
         }
+        work >>= 1;
       }
-      if (do_f) {
-        /* face nodes not yet implemented */
-        SC_ABORT_NOT_REACHED ();
+#ifdef P4_TO_P8
+      /* iterate over the edges adjacent to corner cid */
+      for (j = 0; j < P4EST_DIM; ++j) {
+        if (work & 1) {
+          /* edge in direction j is hanging */
+          e = p8est_corner_edges[cid][j];
+          if (do_c) {
+            /* assign to mid-edge corner */
+            c = cid ^ (1 << j);
+            geco[c] = lni_to_gni (ln, enos[edge_enode[e]]);
+          }
+          if (do_e) {
+            /* assign to small mid-edge */
+            geed[e] = lni_to_gni (ln, enos[corner_edge_enode (cid, j)]);
+          }
+        }
+        work >>= 1;
       }
+#endif
+      P4EST_ASSERT (work == 0);
     }
-    else {
-      /* hanging elements are not yet implemented */
-      SC_ABORT_NOT_REACHED ();
-    }
-    eno += P4EST_CHILDREN;
+
+    /* proceed to the next element */
+    enos += P4EST_CHILDREN;
   }
 }
 
