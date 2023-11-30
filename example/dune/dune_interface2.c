@@ -23,32 +23,106 @@
 */
 
 #ifndef P4_TO_P8
+#include <p4est_bits.h>
 #include <p4est_dune.h>
 #include <p4est_extended.h>
+#include <p4est_vtk.h>
 #else
+#include <p8est_bits.h>
 #include <p8est_dune.h>
 #include <p8est_extended.h>
+#include <p8est_vtk.h>
 #endif /* P4_TO_P8 */
 
 static int
-run_dune_interface (sc_MPI_Comm mpicomm,
-                    p4est_connectivity_t * conn, int maxlevel)
+refine_callback (p4est_t * p4est,
+                 p4est_topidx_t which_tree, p4est_quadrant_t * quadrant)
+{
+  int                 maxlevel;
+  int                 childid;
+
+  P4EST_ASSERT (p4est != NULL);
+  P4EST_ASSERT (p4est->user_pointer != NULL);
+
+  /* do not refine beyond maximum level */
+  maxlevel = *(int *) p4est->user_pointer;
+  if (quadrant->level >= maxlevel) {
+    return 0;
+  }
+
+  /* always refine a certain child for a tree */
+  childid = p4est_quadrant_child_id (quadrant);
+  if (childid == ((int) which_tree) % P4EST_CHILDREN) {
+    return 1;
+  }
+
+  /* refine based on x coordinate */
+  if (quadrant->x >= 9 * P4EST_QUADRANT_LEN (6) &&
+      quadrant->x < 23 * P4EST_QUADRANT_LEN (6) &&
+      (childid >= 1 && childid <= P4EST_HALF)) {
+    return 1;
+  }
+
+  /* refine based on y coordinate */
+  if (quadrant->y >= 5 * P4EST_QUADRANT_LEN (3) && childid >= 2) {
+    return 1;
+  }
+
+#ifdef P4_TO_P8
+  /* refine based on z coordinate */
+  if (quadrant->z >= 6 * P4EST_QUADRANT_LEN (5) &&
+      quadrant->z < 17 * P4EST_QUADRANT_LEN (5)) {
+    return 1;
+  }
+#endif
+
+  return 0;
+}
+
+static int
+run_dune_interface (sc_MPI_Comm mpicomm, p4est_connectivity_t * conn,
+                    int maxlevel, p4est_connect_type_t ctype)
 {
   p4est_t            *p4est;
   p4est_ghost_t      *ghost;
   p4est_dune_numbers_t *dn;
+  p4est_gloidx_t      gnum;
   int                 i;
 
   /* generate mesh with some arbitrary adaptive refinement */
   p4est = p4est_new_ext (mpicomm, conn, 0, 0, 1, 0, NULL, NULL);
+  p4est->user_pointer = &maxlevel;
 
   /* run refinement loop */
+  for (i = 0; i <= maxlevel; ++i) {
+    gnum = p4est->global_num_quadrants;
+    P4EST_GLOBAL_INFOF ("Into refinement iteration %d at %lld quadrants\n",
+                        i, (long long) gnum);
+    p4est_refine (p4est, 0, refine_callback, NULL);
+    P4EST_ASSERT (gnum <= p4est->global_num_quadrants);
+    if (gnum == p4est->global_num_quadrants) {
+      break;
+    }
+    p4est_partition (p4est, 1, NULL);
+  }
+  P4EST_GLOBAL_INFOF ("After refinement iteration %d\n", i);
 
+  /* wait with balancing to make the mesh more interesting */
+  p4est_balance (p4est, ctype, NULL);
+  p4est_partition (p4est, 1, NULL);
+  gnum = p4est->global_num_quadrants;
+  P4EST_GLOBAL_INFOF ("Done after balance and partition at %lld quadrants\n",
+                      (long long) gnum);
+
+  /* output graphical representation */
+  p4est_vtk_write_file (p4est, NULL, P4EST_STRING "_dune_interface");
+
+  /* test various scenarios for DUNE node number export */
   for (i = 1; i < 2; ++i) {
     P4EST_GLOBAL_INFOF ("DUNE mesh interface iteration %d\n", i);
 
     /* only for globally unique numbers we provide a ghost layer */
-    ghost = !i ? NULL : p4est_ghost_new (p4est, P4EST_CONNECT_FULL);
+    ghost = !i ? NULL : p4est_ghost_new (p4est, ctype);
 
     /* generate node numbers for dune */
     dn = p4est_dune_numbers_new (p4est, ghost, NULL);
@@ -163,7 +237,7 @@ main (int argc, char **argv)
 
   /* run program proper */
   if (!progerr) {
-    if (run_dune_interface (mpicomm, conn, maxlevel)) {
+    if (run_dune_interface (mpicomm, conn, maxlevel, P4EST_CONNECT_FULL)) {
       P4EST_GLOBAL_LERROR ("Error running DUNE interface\n");
       progerr = 1;
     }
