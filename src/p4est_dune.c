@@ -308,6 +308,7 @@ p4est_dune_numbers_new (p4est_t * p4est, p4est_ghost_t * ghost,
   /* formally verify arguments */
   P4EST_ASSERT (p4est != NULL);
   P4EST_ASSERT (p4est_is_valid (p4est));
+  P4EST_ASSERT (p4est_is_balanced (p4est, P4EST_CONNECT_ALMOST));
 
   /* allocate numbers structure to populate */
   dn = P4EST_ALLOC_ZERO (p4est_dune_numbers_t, 1);

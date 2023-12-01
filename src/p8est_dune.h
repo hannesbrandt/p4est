@@ -84,6 +84,7 @@ void                p8est_dune_numbers_params_default
  * All element edge numbers are partition-independent und mutually distinct.
  * All element face numbers are partition-independent und mutually distinct.
  * \param [in] p4est    Required input parameter is not modified.
+ *                      It must be balanced at least to P8EST_CONNECT_ALMOST.
  * \param [in] ghost    The ghost layer must match the \a p4est passed.
  *                      It may also be NULL, in which case the numbers are
  *                      local to the process and not globally meaningful.

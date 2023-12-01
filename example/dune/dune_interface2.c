@@ -108,7 +108,7 @@ run_dune_interface (sc_MPI_Comm mpicomm, p4est_connectivity_t * conn,
   P4EST_GLOBAL_INFOF ("After refinement iteration %d\n", i);
 
   /* wait with balancing to make the mesh more interesting */
-  p4est_balance (p4est, ctype, NULL);
+  p4est_balance (p4est, P4EST_CONNECT_ALMOST, NULL);
   p4est_partition (p4est, 1, NULL);
   gnum = p4est->global_num_quadrants;
   P4EST_GLOBAL_INFOF ("Done after balance and partition at %lld quadrants\n",
