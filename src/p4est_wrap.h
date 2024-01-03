@@ -73,6 +73,12 @@ typedef struct
 }
 p4est_wrap_params_t;
 
+/** This structure encapsulates the core p4est data structures.
+ * The wrap provides all relevant information to run a full mark-adapt-partition
+ * for refinement or coarsening using among others \ref p4est_wrap_adapt,
+ * \ref p4est_wrap_partition and \ref p4est_wrap_mark_refine or
+ * \ref p4est_wrap_mark_coarsen respectively.
+ */
 typedef struct p4est_wrap
 {
   /* this member is never used or changed by p4est_wrap */
@@ -80,45 +86,48 @@ typedef struct p4est_wrap
 
   /** If true, this wrap has NULL for ghost, mesh, and flag members.
    * If false, they are properly allocated and kept current internally. */
-  int                 hollow;
+  int                 hollow;           /**< Boolean: create ghost and mesh */
 
   /** Non-negative integer tells us how many adaptations to wait
    * before any given quadrant may be coarsened again. */
-  int                 coarsen_delay;
+  int                 coarsen_delay;    /**< Min amount adaptations before new coarsen */
 
   /** Boolean: If true, we delay coarsening not only after refinement,
    * but also between subsequent coarsenings of the same quadrant. */
-  int                 coarsen_affect;
+  int                 coarsen_affect;   /**< Boolean: delay subsequent coarsing */
 
   /** This reference counter is a workaround for internal use only.
    * Until we have refcounting/copy-on-write for the connectivity,
    * we count the references to conn by copies of this wrap structure.
    * There must be no external references left when this wrap is destroyed.
    */
-  sc_refcount_t       conn_rc;
-  p4est_connectivity_t *conn;
-  struct p4est_wrap  *conn_owner;
+  sc_refcount_t       conn_rc;          /**< Reference counter of connectivity */
+  p4est_connectivity_t *conn;           /**< The connectivity referenced */
+  struct p4est_wrap  *conn_owner;       /**< Wrap that owns the connectivity */
 
   /* these members are considered public and read-only */
-  int                 p4est_dim;
-  int                 p4est_half;
-  int                 p4est_faces;
-  int                 p4est_children;
-  p4est_connect_type_t btype;
-  p4est_replace_t     replace_fn;
-  p4est_t            *p4est;    /**< p4est->user_pointer is used internally */
+  int                 p4est_dim;        /**< Dimension of the p4est */
+  int                 p4est_half;       /**< Half number of children per quadrant */
+  int                 p4est_faces;      /**< Number faces per quadrant */
+  int                 p4est_children;   /**< Number children per quadrant */
+  p4est_connect_type_t btype;           /**< Connect type of ghost and mesh */
+  p4est_replace_t     replace_fn;       /**< Replace function used for adaptation */
+  p4est_t            *p4est;            /**< p4est->user_pointer is used internally */
 
   /* anything below here is considered private und should not be touched */
-  int                 weight_exponent;
-  uint8_t            *flags, *temp_flags;
-  p4est_locidx_t      num_refine_flags, inside_counter, num_replaced;
+  int                 weight_exponent;  /**< Weight used for partitioning */
+  uint8_t            *flags;            /**< Quadrant refinement flags */
+  uint8_t            *temp_flags;       /**< Temporary quadrant refinement flags */
+  p4est_locidx_t      num_refine_flags; /**< Number of quadrants refined */
+  p4est_locidx_t      inside_counter;   /**< Index quadrants during refinement */
+  p4est_locidx_t      num_replaced;     /**< Number of replaced quadrants */
 
   /* for ghost and mesh use p4est_wrap_get_ghost, _mesh declared below */
-  p4est_ghost_t      *ghost;
-  p4est_mesh_t       *mesh;
-  p4est_ghost_t      *ghost_aux;
-  p4est_mesh_t       *mesh_aux;
-  int                 match_aux;
+  p4est_ghost_t      *ghost;            /**< Ghost of the p4est */
+  p4est_mesh_t       *mesh;             /**< Mesh of the p4est */
+  p4est_ghost_t      *ghost_aux;        /**< Auxiliary ghost for adaptation */
+  p4est_mesh_t       *mesh_aux;         /**< Auxiliary mesh for adaptation */
+  int                 match_aux;        /**< Boolean: {ghost,mesh}_aux != NULL */
 }
 p4est_wrap_t;
 
