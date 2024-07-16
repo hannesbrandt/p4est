@@ -290,7 +290,7 @@ generate_numbers (p4est_dune_numbers_t * dn, p4est_lnodes_t * ln)
     }
 
     /* proceed to the next element */
-    enos += P4EST_CHILDREN;
+    enos += ln->vnodes;
   }
 }
 
