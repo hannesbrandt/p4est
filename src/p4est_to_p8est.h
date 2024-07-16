@@ -156,12 +156,15 @@
 #define p4est_lnodes_buffer_t           p8est_lnodes_buffer_t
 #define p4est_iter_volume_t             p8est_iter_volume_t
 #define p4est_iter_volume_info_t        p8est_iter_volume_info_t
+#define p4est_iter_face_side_full_t     p8est_iter_face_side_full_t
+#define p4est_iter_face_side_hanging_t  p8est_iter_face_side_hanging_t
 #define p4est_iter_face_t               p8est_iter_face_t
 #define p4est_iter_face_info_t          p8est_iter_face_info_t
 #define p4est_iter_face_side_t          p8est_iter_face_side_t
 #define p4est_iter_corner_t             p8est_iter_corner_t
 #define p4est_iter_corner_side_t        p8est_iter_corner_side_t
 #define p4est_iter_corner_info_t        p8est_iter_corner_info_t
+#define p4est_mesh_params_t             p8est_mesh_params_t
 #define p4est_search_query_t            p8est_search_query_t
 #define p4est_search_local_t            p8est_search_local_t
 #define p4est_search_reorder_t          p8est_search_reorder_t
@@ -176,16 +179,21 @@
 #define p4est_wrap_t                    p8est_wrap_t
 #define p4est_wrap_leaf_t               p8est_wrap_leaf_t
 #define p4est_wrap_flags_t              p8est_wrap_flags_t
+#define p4est_wrap_params_t             p8est_wrap_params_t
 #define p4est_vtk_context_t             p8est_vtk_context_t
 #define p4est_file_context_t            p8est_file_context_t
 #define p4est_file_section_metadata_t   p8est_file_section_metadata_t
 
 /* redefine external variables */
+#define p4est_volume_point              p8est_volume_point
 #define p4est_face_corners              p8est_face_corners
+#define p4est_face_points               p8est_face_points
 #define p4est_face_dual                 p8est_face_dual
 #define p4est_corner_faces              p8est_corner_faces
 #define p4est_corner_face_corners       p8est_corner_face_corners
+#define p4est_corner_points             p8est_corner_points
 #define p4est_child_corner_faces        p8est_child_corner_faces
+#define p4est_lnodes_corner_hanging     p8est_lnodes_corner_hanging
 #define P4EST_DATA_UNINITIALIZED        P8EST_DATA_UNINITIALIZED
 
 /* functions in p4est_connectivity */
@@ -283,6 +291,8 @@
 #define p4est_quadrant_set_morton_ext128 p8est_quadrant_set_morton_ext128
 #define p4est_new_ext                   p8est_new_ext
 #define p4est_mesh_new_ext              p8est_mesh_new_ext
+#define p4est_mesh_new_params           p8est_mesh_new_params
+#define p4est_mesh_params_init          p8est_mesh_params_init
 #define p4est_copy_ext                  p8est_copy_ext
 #define p4est_refine_ext                p8est_refine_ext
 #define p4est_coarsen_ext               p8est_coarsen_ext
@@ -412,6 +422,7 @@
 #define p4est_search_reorder            p8est_search_reorder
 #define p4est_search_partition          p8est_search_partition
 #define p4est_search_partition_gfx      p8est_search_partition_gfx
+#define p4est_search_partition_gfp      p8est_search_partition_gfp
 #define p4est_search_all                p8est_search_all
 #define p4est_build_new                 p8est_build_new
 #define p4est_build_init_add            p8est_build_init_add
@@ -461,6 +472,7 @@
 #define p4est_comm_count_pertree        p8est_comm_count_pertree
 #define p4est_comm_is_empty             p8est_comm_is_empty
 #define p4est_comm_is_empty_gfq         p8est_comm_is_empty_gfq
+#define p4est_comm_is_empty_gfp         p8est_comm_is_empty_gfp
 #define p4est_comm_is_contained         p8est_comm_is_contained
 #define p4est_comm_is_owner             p8est_comm_is_owner
 #define p4est_comm_is_owner_gfp         p8est_comm_is_owner_gfp
@@ -469,7 +481,6 @@
 #define p4est_comm_neighborhood_owned   p8est_comm_neighborhood_owned
 #define p4est_comm_sync_flag            p8est_comm_sync_flag
 #define p4est_comm_checksum             p8est_comm_checksum
-#define p4est_comm_checksum_partition   p8est_comm_checksum_partition
 #define p4est_transfer_fixed            p8est_transfer_fixed
 #define p4est_bsearch_partition         p8est_bsearch_partition
 #define p4est_transfer_fixed_begin      p8est_transfer_fixed_begin
@@ -509,6 +520,7 @@
 /* functions in p4est_geometry */
 #define p4est_geometry_destroy          p8est_geometry_destroy
 #define p4est_geometry_new_connectivity p8est_geometry_new_connectivity
+#define p4est_geometry_connectivity_X   p8est_geometry_connectivity_X
 
 /* functions in p4est_vtk */
 #define p4est_vtk_context_new           p8est_vtk_context_new
@@ -595,15 +607,19 @@
 #define p4est_balance_seeds             p8est_balance_seeds
 
 /* functions in p4est_wrap */
+#define p4est_wrap_params_init          p8est_wrap_params_init
 #define p4est_wrap_new_conn             p8est_wrap_new_conn
 #define p4est_wrap_new_p4est            p8est_wrap_new_p8est
+#define p4est_wrap_new_p4est_params     p8est_wrap_new_p8est_params
 #define p4est_wrap_new_brick            p8est_wrap_new_brick
 #define p4est_wrap_new_world            p8est_wrap_new_world
 #define p4est_wrap_new_ext              p8est_wrap_new_ext
+#define p4est_wrap_new_params           p8est_wrap_new_params
 #define p4est_wrap_new_copy             p8est_wrap_new_copy
 #define p4est_wrap_destroy              p8est_wrap_destroy
 #define p4est_wrap_set_hollow           p8est_wrap_set_hollow
 #define p4est_wrap_set_coarsen_delay    p8est_wrap_set_coarsen_delay
+#define p4est_wrap_set_partitioning     p8est_wrap_set_partitioning
 #define p4est_wrap_get_ghost            p8est_wrap_get_ghost
 #define p4est_wrap_get_mesh             p8est_wrap_get_mesh
 #define p4est_wrap_mark_refine          p8est_wrap_mark_refine
