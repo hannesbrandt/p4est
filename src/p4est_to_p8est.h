@@ -637,7 +637,7 @@
 /* functions and types in p4est_dune */
 #define p4est_dune_numbers_t            p8est_dune_numbers_t
 #define p4est_dune_numbers_params_t     p8est_dune_numbers_params_t
-#define p4est_dune_numbers_params_default p8est_dune_numbers_params_default
+#define p4est_dune_numbers_params_init  p8est_dune_numbers_params_init
 #define p4est_dune_numbers_new          p8est_dune_numbers_new
 #define p4est_dune_numbers_destroy      p8est_dune_numbers_destroy
 

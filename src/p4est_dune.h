@@ -77,7 +77,7 @@ p4est_dune_numbers_t;
  * \param [out] params  Pointer must not be NULL.
  *                      The structure is filled with default values.
  */
-void                p4est_dune_numbers_params_default
+void                p4est_dune_numbers_params_init
   (p4est_dune_numbers_params_t * params);
 
 /** Create lookup tables for unique corners and faces.
@@ -91,7 +91,7 @@ void                p4est_dune_numbers_params_default
  *                      the parameter \ref P4EST_CONNECT_FULL.
  * \param [in] params   Further parameters to control the mode of operation.
  *                      When passing NULL, the behavior is identical to using
- *                      defaults by \ref p4est_dune_numbers_params_default.
+ *                      defaults by \ref p4est_dune_numbers_params_init.
  * \return              A fully initialized dune node numbering.
  *                      Deallocate with \ref p4est_dune_numbers_destroy.
  */

@@ -132,7 +132,7 @@ corner_edge_enode (int c, int j)
 
 /* set default parameters */
 void
-p4est_dune_numbers_params_default (p4est_dune_numbers_params_t * params)
+p4est_dune_numbers_params_init (p4est_dune_numbers_params_t * params)
 {
   P4EST_ASSERT (params != NULL);
 
@@ -301,7 +301,6 @@ p4est_dune_numbers_new (p4est_t * p4est, p4est_ghost_t * ghost,
 {
   p4est_dune_numbers_t *dn;
   p4est_dune_numbers_params_t *pa;
-  p4est_ghost_t      *gh;
   p4est_lnodes_t     *ln;
   p4est_locidx_t      lne;
 
@@ -309,6 +308,7 @@ p4est_dune_numbers_new (p4est_t * p4est, p4est_ghost_t * ghost,
   P4EST_ASSERT (p4est != NULL);
   P4EST_ASSERT (p4est_is_valid (p4est));
   P4EST_ASSERT (p4est_is_balanced (p4est, P4EST_CONNECT_ALMOST));
+  P4EST_ASSERT (ghost != NULL);
 
   /* allocate numbers structure to populate */
   dn = P4EST_ALLOC_ZERO (p4est_dune_numbers_t, 1);
@@ -316,7 +316,7 @@ p4est_dune_numbers_new (p4est_t * p4est, p4est_ghost_t * ghost,
 
   /* establish input parameters and remember them */
   if (params == NULL) {
-    p4est_dune_numbers_params_default (pa);
+    p4est_dune_numbers_params_init (pa);
   }
   else {
     *pa = *params;
@@ -324,13 +324,8 @@ p4est_dune_numbers_new (p4est_t * p4est, p4est_ghost_t * ghost,
   }
 
   /* generate temporary local ghost (if needed) and node numbering */
-  ln = p4est_lnodes_new
-    (p4est, ghost == NULL ?
-     (gh = p4est_ghost_new_local (p4est, pa->ctype)) : (gh = NULL, ghost), 4);
-  if (gh != NULL) {
-    /* this was a local lnodes without parallel neighbors */
-    p4est_ghost_destroy (gh);
-  }
+  ln = p4est_lnodes_new (p4est, ghost, 4);
+  dn->num_local_numbers = ln->num_local_nodes;
 
   /* construct corner and face numbers and return them */
   lne = p4est->local_num_quadrants;

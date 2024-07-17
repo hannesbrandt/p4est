@@ -119,19 +119,25 @@ run_dune_interface (sc_MPI_Comm mpicomm, p4est_connectivity_t * conn,
 
   /* test various scenarios for DUNE node number export */
   for (i = 1; i < 2; ++i) {
+    p4est_dune_numbers_params_t dparams, *pa = &dparams;
+    p4est_dune_numbers_params_init (pa);
+    pa->ctype = ctype;
+
     P4EST_GLOBAL_INFOF ("DUNE mesh interface iteration %d\n", i);
 
-    /* only for globally unique numbers we provide a ghost layer */
-    ghost = !i ? NULL : p4est_ghost_new (p4est, ctype);
+    /* we must provide a ghost layer */
+    ghost = p4est_ghost_new (p4est, P4EST_CONNECT_FULL);
 
     /* generate node numbers for dune */
-    dn = p4est_dune_numbers_new (p4est, ghost, NULL);
+    dn = p4est_dune_numbers_new (p4est, ghost, pa);
+
+    /* TO DO: do something with the DUNE node numbers */
+
+    /* free memory in generated interface */
     p4est_dune_numbers_destroy (dn);
 
-    /* deallocate temporary structures */
-    if (ghost != NULL) {
-      p4est_ghost_destroy (ghost);
-    }
+    /* deallocate temporary structure */
+    p4est_ghost_destroy (ghost);
   }
 
   /* deallocate generated mesh and return */
