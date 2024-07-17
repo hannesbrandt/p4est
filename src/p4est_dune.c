@@ -298,6 +298,82 @@ generate_numbers (p4est_dune_numbers_t * dn, p4est_lnodes_t * ln)
   }
 }
 
+static void
+consecutive_numbers (p4est_dune_numbers_t * dn,
+                     p4est_locidx_t num_local_nodes)
+{
+  /* an array of bits, one per local node number, for codimensions */
+  uint8_t            *local_node_bytes;
+  uint8_t             mask_byte, node_byte;
+  int                 j;
+  sc_array_t         *dim_numbers[P4EST_DIM], *numbers;
+  p4est_locidx_t     *dim_results[P4EST_DIM], *newnums;
+  p4est_locidx_t      li, lcount, lnum, ncount;
+
+  /* input checks */
+  P4EST_ASSERT (dn != NULL);
+
+  /* prepare temporary data */
+  local_node_bytes = P4EST_ALLOC_ZERO (uint8_t, num_local_nodes);
+  dim_numbers[0] = dn->element_corners;
+  dim_results[0] = &dn->num_corner_numbers;
+#ifdef P4_TO_P8
+  dim_numbers[1] = dn->element_edges;
+  dim_results[1] = &dn->num_edge_numbers;
+#endif
+  dim_numbers[P4EST_DIM - 1] = dn->element_faces;
+  dim_results[P4EST_DIM - 1] = &dn->num_face_numbers;
+
+  /* go through node arrays to count unique entries */
+  for (j = 0; j < P4EST_DIM; ++j) {
+    mask_byte = 1 << j;
+    numbers = dim_numbers[j];
+    P4EST_ASSERT (numbers->elem_size == sizeof (p4est_locidx_t));
+
+    /* mark each local node that occurs in any of the arrays */
+    lcount = (p4est_locidx_t) numbers->elem_count;
+    for (li = 0; li < lcount; ++li) {
+      lnum = *(p4est_locidx_t *) sc_array_index (numbers, li);
+      P4EST_ASSERT (0 <= lnum && lnum < num_local_nodes);
+      node_byte = local_node_bytes[lnum];
+      if (!(node_byte & mask_byte)) {
+        local_node_bytes[lnum] = node_byte | mask_byte;
+      }
+    }
+  }
+
+  /* renumber nodes to contiguous subrange */
+  newnums = P4EST_ALLOC (p4est_locidx_t, num_local_nodes);
+  for (j = 0; j < P4EST_DIM; ++j) {
+    mask_byte = 1 << j;
+    numbers = dim_numbers[j];
+    memset (newnums, -1, num_local_nodes * sizeof (*newnums));
+    ncount = 0;
+
+    /* figure out which local nodes are relevant for dimension j */
+    lcount = num_local_nodes;
+    for (li = 0; li < lcount; ++li) {
+      if (local_node_bytes[li] & mask_byte) {
+        newnums[li] = ncount++;
+      }
+    }
+
+    /* reassign entries of numbers array */
+    lcount = (p4est_locidx_t) numbers->elem_count;
+    for (li = 0; li < lcount; ++li) {
+      lnum = *(p4est_locidx_t *) sc_array_index (numbers, li);
+      P4EST_ASSERT (0 <= lnum && lnum < num_local_nodes);
+      P4EST_ASSERT (local_node_bytes[lnum] & mask_byte);
+      lnum = newnums[lnum];
+      P4EST_ASSERT (0 <= lnum && lnum < ncount);
+      *(p4est_locidx_t *) sc_array_index (numbers, li) = lnum;
+    }
+    *dim_results[j] = ncount;
+  }
+  P4EST_FREE (newnums);
+  P4EST_FREE (local_node_bytes);
+}
+
 /* create lookup tables for unique corners and faces */
 p4est_dune_numbers_t *
 p4est_dune_numbers_new (p4est_t * p4est, p4est_ghost_t * ghost,
@@ -329,7 +405,6 @@ p4est_dune_numbers_new (p4est_t * p4est, p4est_ghost_t * ghost,
 
   /* generate temporary local ghost (if needed) and node numbering */
   ln = p4est_lnodes_new (p4est, ghost, 4);
-  dn->num_local_numbers = ln->num_local_nodes;
 
   /* construct corner and face numbers and return them */
   lne = p4est->local_num_quadrants;
@@ -348,6 +423,9 @@ p4est_dune_numbers_new (p4est_t * p4est, p4est_ghost_t * ghost,
       sc_array_new_count (sizeof (p4est_locidx_t), lne * P4EST_FACES);
   }
   generate_numbers (dn, ln);
+
+  /* transform numbering into contiguous ranges per codimension */
+  consecutive_numbers (dn, ln->num_local_nodes);
 
   /* clean internal state and return */
   p4est_lnodes_destroy (ln);

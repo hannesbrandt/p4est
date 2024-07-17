@@ -27,6 +27,7 @@
  * Populate element corner and face number tables to interface to DUNE.
  * The same number may be used for some corner and some face.
  * Uniqueness holds among corners, and separately among faces.
+ * The ranges of numbers per codimension are contiguous.
  *
  * \ingroup p4est
  */
@@ -62,13 +63,16 @@ typedef struct p4est_dune_numbers
   /** Parameters the numbers are built with are copied by value. */
   p4est_dune_numbers_params_t params;
 
-  /** Highest number (exclusive) among all array entries. */
-  p4est_locidx_t      num_local_numbers;
+  /** Highest number (exclusive) among all element corner entries. */
+  p4est_locidx_t      num_corner_numbers;
 
-  /** For each element corner a process-local index. */
+  /** For each local element corner a process-local index. */
   sc_array_t         *element_corners;
 
-  /** For each element face a process-local index. */
+  /** Highest number (exclusive) among all element face entries. */
+  p4est_locidx_t      num_face_numbers;
+
+  /** For each local element face a process-local index. */
   sc_array_t         *element_faces;
 }
 p4est_dune_numbers_t;
