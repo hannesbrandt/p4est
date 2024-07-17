@@ -23,10 +23,12 @@
 */
 
 /** \file p8est_dune.h
+ *
  * Populate element corner, edge, and face numbers to interface to DUNE.
- * Depending on the invocation, they are locally or globally unique.
  * The same number may be used for some corner, some edge and some face.
  * Uniqueness holds among corners, separately among edges and among faces.
+ *
+ * \ingroup p8est
  */
 
 #ifndef P8EST_DUNE_H
@@ -46,27 +48,31 @@ p8est_dune_numbers_params_t;
 
 /** Element corner, edge and face numbers to interface to the DUNE library.
  *
- * The element corner, edge and face arrays hold global indices
- * that are unique within the partition among all faces, and likewise
- * unique within the partition among all corners, and among all edges.
+ * The element corner, edge and face arrays hold local indices that are
+ * unique within this process among all faces, and likewise unique within
+ * this process among all edges, and likewise all corners.  The same number
+ * may occur in two or even three of the arrays, but it refers to a
+ * different mesh object each instance.
  *
- * If the \ref p8est_ghost_t member to \ref p8est_dune_numbers_new has
- * been passed as NULL, then the numbers will not be globally synced.
+ * The indices are numbered starting from zero.
  *
- * The global indices are of type \ref p4est_gloidx_t.
+ * The array entries are of type \ref p4est_locidx_t.
  */
 typedef struct p8est_dune_numbers
 {
-  /** Parameters the structure was built with copied by value. */
+  /** Parameters the numbers are built with are copied by value. */
   p8est_dune_numbers_params_t params;
 
-  /** For each element corner a partition-independent global index. */
+  /** Highest number (exclusive) among all array entries. */
+  p4est_locidx_t      num_local_numbers;
+
+  /** For each element corner a process-local index. */
   sc_array_t         *element_corners;
 
-  /** For each element edge a partition-independent global index. */
+  /** For each element edge a process-local index. */
   sc_array_t         *element_edges;
 
-  /** For each element face a partition-independent global index. */
+  /** For each element face a process-local index. */
   sc_array_t         *element_faces;
 }
 p8est_dune_numbers_t;
@@ -79,22 +85,21 @@ void                p8est_dune_numbers_params_default
   (p8est_dune_numbers_params_t * params);
 
 /** Create lookup tables for unique corners, edges and faces.
- * Hanging corners, edges and faces are included.
- * All element corner numbers are partition-independent und mutually distinct.
- * All element edge numbers are partition-independent und mutually distinct.
- * All element face numbers are partition-independent und mutually distinct.
- * \param [in] p4est    Required input parameter is not modified.
- *                      It must be balanced at least to P8EST_CONNECT_ALMOST.
- * \param [in] ghost    The ghost layer must match the \a p4est passed.
- *                      It may also be NULL, in which case the numbers are
- *                      local to the process and not globally meaningful.
+ * Hanging corners, edges and faces are included as independent entities.
+ * All numbers are process-local.
+ *
+ * \param [in] p8est    Required input parameter is not modified.  It must
+ *                      be balanced at least to \ref P8EST_CONNECT_ALMOST.
+ * \param [in] ghost    The ghost layer must have been generated with
+ *                      \ref p8est_ghost_new using the same \c p8est and
+ *                      the parameter \ref P8EST_CONNECT_FULL.
  * \param [in] params   Further parameters to control the mode of operation.
  *                      When passing NULL, the behavior is identical to using
- *                      defaults by \ref p8est_dune_numbers_params_default.
+ *                      defaults by \ref p4est_dune_numbers_params_default.
  * \return              A fully initialized dune node numbering.
  *                      Deallocate with \ref p8est_dune_numbers_destroy.
  */
-p8est_dune_numbers_t *p8est_dune_numbers_new (p8est_t * p4est,
+p8est_dune_numbers_t *p8est_dune_numbers_new (p8est_t * p8est,
                                               p8est_ghost_t * ghost,
                                               const
                                               p8est_dune_numbers_params_t *

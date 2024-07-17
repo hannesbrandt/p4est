@@ -23,10 +23,12 @@
 */
 
 /** \file p4est_dune.h
+ *
  * Populate element corner and face number tables to interface to DUNE.
- * Depending on the invocation, they are locally or globally unique.
  * The same number may be used for some corner and some face.
- * Uniqueness holds among corners and separately among faces.
+ * Uniqueness holds among corners, and separately among faces.
+ *
+ * \ingroup p4est
  */
 
 #ifndef P4EST_DUNE_H
@@ -46,24 +48,27 @@ p4est_dune_numbers_params_t;
 
 /** Element corner and face numbers to interface to the DUNE library.
  *
- * The element corners and faces arrays hold globally unique indices
- * that are unique within the partition among all faces, and likewise
- * unique within the partition among all corners.
+ * The element corners and faces arrays hold local indices that are unique
+ * within this process among all faces, and likewise unique within this
+ * process among all corners.  The same number may occur in both the
+ * face and corner list, but it refers to a different mesh object.
  *
- * If the \ref p4est_ghost_t member to \ref p4est_dune_numbers_new has
- * been passed as NULL, then the numbers will not be globally synced.
+ * The indices are numbered starting from zero.
  *
- * The global indices are of type \ref p4est_gloidx_t.
+ * The array entries are of type \ref p4est_locidx_t.
  */
 typedef struct p4est_dune_numbers
 {
-  /** Parameters the structure was built with copied by value. */
+  /** Parameters the numbers are built with are copied by value. */
   p4est_dune_numbers_params_t params;
 
-  /** For each element corner a partition-independent global index. */
+  /** Highest number (exclusive) among all array entries. */
+  p4est_locidx_t      num_local_numbers;
+
+  /** For each element corner a process-local index. */
   sc_array_t         *element_corners;
 
-  /** For each element face a partition-independent global index. */
+  /** For each element face a process-local index. */
   sc_array_t         *element_faces;
 }
 p4est_dune_numbers_t;
@@ -76,14 +81,14 @@ void                p4est_dune_numbers_params_default
   (p4est_dune_numbers_params_t * params);
 
 /** Create lookup tables for unique corners and faces.
- * Hanging corners and faces are included.
- * All element corner numbers are partition-independent und mutually distinct.
- * All element face numbers are partition-independent und mutually distinct.
- * \param [in] p4est    Required input parameter is not modified.
- *                      It must be balanced at least to P4EST_CONNECT_ALMOST.
- * \param [in] ghost    The ghost layer must match the \a p4est passed.
- *                      It may also be NULL, in which case the numbers are
- *                      local to the process and not globally meaningful.
+ * Hanging corners and faces are included as independent entities.
+ * All numbers are process-local.
+ *
+ * \param [in] p4est    Required input parameter is not modified.  It must
+ *                      be balanced at least to \ref P4EST_CONNECT_ALMOST.
+ * \param [in] ghost    The ghost layer must have been generated with
+ *                      \ref p4est_ghost_new using the same \c p4est and
+ *                      the parameter \ref P4EST_CONNECT_FULL.
  * \param [in] params   Further parameters to control the mode of operation.
  *                      When passing NULL, the behavior is identical to using
  *                      defaults by \ref p4est_dune_numbers_params_default.
