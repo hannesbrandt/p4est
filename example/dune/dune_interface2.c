@@ -84,7 +84,7 @@ run_dune_interface (sc_MPI_Comm mpicomm, p4est_connectivity_t * conn,
                     int maxlevel)
 {
   int                 i, j;
-  p4est_connect_type_t ctype;
+  int                 ctype;
   p4est_gloidx_t      gnum;
   p4est_t            *p4est;
   p4est_ghost_t      *ghost;
@@ -132,7 +132,7 @@ run_dune_interface (sc_MPI_Comm mpicomm, p4est_connectivity_t * conn,
     P4EST_ASSERT (ctype <= P4EST_CONNECT_FULL);
 
     /* generate node numbers for dune */
-    pa->ctype = ctype++;
+    pa->ctype = (p4est_connect_type_t) ctype++;
     dn = p4est_dune_numbers_new (p4est, ghost, pa);
 
     /* TO DO: do something with the DUNE node numbers */
