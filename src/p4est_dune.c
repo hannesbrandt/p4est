@@ -140,6 +140,8 @@ p4est_dune_numbers_params_init (p4est_dune_numbers_params_t * params)
   params->ctype = P4EST_CONNECT_FULL;
 }
 
+#if 0                           /* presently unused */
+
 static              p4est_gloidx_t
 lni_to_gni (p4est_lnodes_t * ln, p4est_locidx_t lni)
 {
@@ -156,6 +158,8 @@ lni_to_gni (p4est_lnodes_t * ln, p4est_locidx_t lni)
   }
 }
 
+#endif
+
 /* Populate number arrays for real.  This function does all the work. */
 static void
 generate_numbers (p4est_dune_numbers_t * dn, p4est_lnodes_t * ln)
@@ -167,12 +171,12 @@ generate_numbers (p4est_dune_numbers_t * dn, p4est_lnodes_t * ln)
   int                 cid, work;
   int                 c, f;
   int                 do_c, do_f;
-  p4est_gloidx_t     *geco, *gefa;
+  p4est_locidx_t     *geco, *gefa;
 #ifdef P4_TO_P8
   int                 j, k;
   int                 e;
   int                 do_e;
-  p4est_gloidx_t     *geed;
+  p4est_locidx_t     *geed;
 #endif
 
   /* basic verification of input parameters */
@@ -207,29 +211,29 @@ generate_numbers (p4est_dune_numbers_t * dn, p4est_lnodes_t * ln)
 
     /* assign standard values for an element that is not hanging anywhere */
     if (do_c) {
-      geco = (p4est_gloidx_t *)
+      geco = (p4est_locidx_t *)
         sc_array_index (dn->element_corners, el * P4EST_CHILDREN);
       for (c = 0; c < P4EST_CHILDREN; ++c) {
         /* retrieve global number of corner node */
-        geco[c] = lni_to_gni (ln, enos[corner_enode[c]]);
+        geco[c] = enos[corner_enode[c]];
       }
     }
 #ifdef P4_TO_P8
     if (do_e) {
-      geed = (p4est_gloidx_t *)
+      geed = (p4est_locidx_t *)
         sc_array_index (dn->element_edges, el * P8EST_EDGES);
       for (e = 0; e < P8EST_EDGES; ++e) {
         /* retrieve global number of edge node */
-        geed[e] = lni_to_gni (ln, enos[edge_enode[e]]);
+        geed[e] = enos[edge_enode[e]];
       }
     }
 #endif
     if (do_f) {
-      gefa = (p4est_gloidx_t *)
+      gefa = (p4est_locidx_t *)
         sc_array_index (dn->element_faces, el * P4EST_FACES);
       for (f = 0; f < P4EST_FACES; ++f) {
         /* retrieve global number of face node */
-        gefa[f] = lni_to_gni (ln, enos[face_enode[f]]);
+        gefa[f] = enos[face_enode[f]];
       }
     }
 
@@ -247,7 +251,7 @@ generate_numbers (p4est_dune_numbers_t * dn, p4est_lnodes_t * ln)
           c = cid ^ (P4EST_CHILDREN - 1) ^ (1 << i);
           if (do_c) {
             /* assign to mid-face corner */
-            geco[c] = lni_to_gni (ln, enos[face_enode[f]]);
+            geco[c] = enos[face_enode[f]];
           }
 #ifdef P4_TO_P8
           if (do_e) {
@@ -255,14 +259,14 @@ generate_numbers (p4est_dune_numbers_t * dn, p4est_lnodes_t * ln)
             j = (i + 1) % 3;
             k = (j + 1) % 3;
             geed[p8est_corner_edges[c][j]] =
-              lni_to_gni (ln, enos[corner_twostep_enode (cid, j, k)]);
+              enos[corner_twostep_enode (cid, j, k)];
             geed[p8est_corner_edges[c][k]] =
-              lni_to_gni (ln, enos[corner_twostep_enode (cid, k, j)]);
+              enos[corner_twostep_enode (cid, k, j)];
           }
 #endif
           if (do_f) {
             /* assign to small mid-face */
-            gefa[f] = lni_to_gni (ln, enos[corner_face_enode (cid, i)]);
+            gefa[f] = enos[corner_face_enode (cid, i)];
           }
         }
         work >>= 1;
@@ -276,11 +280,11 @@ generate_numbers (p4est_dune_numbers_t * dn, p4est_lnodes_t * ln)
           if (do_c) {
             /* assign to mid-edge corner */
             c = cid ^ (1 << j);
-            geco[c] = lni_to_gni (ln, enos[edge_enode[e]]);
+            geco[c] = enos[edge_enode[e]];
           }
           if (do_e) {
             /* assign to small mid-edge */
-            geed[e] = lni_to_gni (ln, enos[corner_edge_enode (cid, j)]);
+            geed[e] = enos[corner_edge_enode (cid, j)];
           }
         }
         work >>= 1;
@@ -331,17 +335,17 @@ p4est_dune_numbers_new (p4est_t * p4est, p4est_ghost_t * ghost,
   lne = p4est->local_num_quadrants;
   if (pa->ctype >= P4EST_CONNECT_CORNER) {
     dn->element_corners =
-      sc_array_new_count (sizeof (p4est_gloidx_t), lne * P4EST_CHILDREN);
+      sc_array_new_count (sizeof (p4est_locidx_t), lne * P4EST_CHILDREN);
   }
 #ifdef P4_TO_P8
   if (pa->ctype >= P8EST_CONNECT_EDGE) {
     dn->element_edges =
-      sc_array_new_count (sizeof (p4est_gloidx_t), lne * P8EST_EDGES);
+      sc_array_new_count (sizeof (p4est_locidx_t), lne * P8EST_EDGES);
   }
 #endif
   if (pa->ctype >= P4EST_CONNECT_FACE) {
     dn->element_faces =
-      sc_array_new_count (sizeof (p4est_gloidx_t), lne * P4EST_FACES);
+      sc_array_new_count (sizeof (p4est_locidx_t), lne * P4EST_FACES);
   }
   generate_numbers (dn, ln);
 
