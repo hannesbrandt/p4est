@@ -81,13 +81,14 @@ refine_callback (p4est_t * p4est,
 
 static int
 run_dune_interface (sc_MPI_Comm mpicomm, p4est_connectivity_t * conn,
-                    int maxlevel, p4est_connect_type_t ctype)
+                    int maxlevel)
 {
+  int                 i, j;
+  p4est_connect_type_t ctype;
+  p4est_gloidx_t      gnum;
   p4est_t            *p4est;
   p4est_ghost_t      *ghost;
   p4est_dune_numbers_t *dn;
-  p4est_gloidx_t      gnum;
-  int                 i;
 
   /* generate mesh with some arbitrary adaptive refinement */
   p4est = p4est_new_ext (mpicomm, conn, 0, 0, 1, 0, NULL, NULL);
@@ -117,28 +118,31 @@ run_dune_interface (sc_MPI_Comm mpicomm, p4est_connectivity_t * conn,
   /* output graphical representation */
   p4est_vtk_write_file (p4est, NULL, P4EST_STRING "_dune_interface");
 
-  /* test various scenarios for DUNE node number export */
-  for (i = 1; i < 2; ++i) {
-    p4est_dune_numbers_params_t dparams, *pa = &dparams;
-    p4est_dune_numbers_params_init (pa);
-    pa->ctype = ctype;
+  /* we must provide a ghost layer */
+  ghost = p4est_ghost_new (p4est, P4EST_CONNECT_FULL);
 
-    P4EST_GLOBAL_INFOF ("DUNE mesh interface iteration %d\n", i);
+  /* initialize DUNE node number export */
+  p4est_dune_numbers_params_t dparams, *pa = &dparams;
+  p4est_dune_numbers_params_init (pa);
 
-    /* we must provide a ghost layer */
-    ghost = p4est_ghost_new (p4est, P4EST_CONNECT_FULL);
+  /* try all codimension types */
+  ctype = P4EST_CONNECT_SELF;
+  for (j = 0; j <= P4EST_DIM; ++j) {
+    P4EST_GLOBAL_INFOF ("DUNE mesh interface connect %d %d\n", j, ctype);
+    P4EST_ASSERT (ctype <= P4EST_CONNECT_FULL);
 
     /* generate node numbers for dune */
+    pa->ctype = ctype++;
     dn = p4est_dune_numbers_new (p4est, ghost, pa);
 
     /* TO DO: do something with the DUNE node numbers */
 
     /* free memory in generated interface */
     p4est_dune_numbers_destroy (dn);
-
-    /* deallocate temporary structure */
-    p4est_ghost_destroy (ghost);
   }
+
+  /* deallocate temporary structure */
+  p4est_ghost_destroy (ghost);
 
   /* deallocate generated mesh and return */
   p4est_destroy (p4est);
@@ -243,7 +247,7 @@ main (int argc, char **argv)
 
   /* run program proper */
   if (!progerr) {
-    if (run_dune_interface (mpicomm, conn, maxlevel, P4EST_CONNECT_FULL)) {
+    if (run_dune_interface (mpicomm, conn, maxlevel)) {
       P4EST_GLOBAL_LERROR ("Error running DUNE interface\n");
       progerr = 1;
     }

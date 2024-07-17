@@ -25,9 +25,7 @@
 /** \file p4est_dune.h
  *
  * Populate element corner and face number tables to interface to DUNE.
- * The same number may be used for some corner and some face.
- * Uniqueness holds among corners, and separately among faces.
- * The ranges of numbers per codimension are contiguous.
+ * The range for each codimension begins with 0 and is contiguous.
  *
  * \ingroup p4est
  */

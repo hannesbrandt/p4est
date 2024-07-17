@@ -326,9 +326,12 @@ consecutive_numbers (p4est_dune_numbers_t * dn,
 
   /* go through node arrays to count unique entries */
   for (j = 0; j < P4EST_DIM; ++j) {
-    mask_byte = 1 << j;
-    numbers = dim_numbers[j];
+    P4EST_ASSERT (*dim_results[j] == 0);
+    if ((numbers = dim_numbers[j]) == NULL) {
+      continue;
+    }
     P4EST_ASSERT (numbers->elem_size == sizeof (p4est_locidx_t));
+    mask_byte = 1 << j;
 
     /* mark each local node that occurs in any of the arrays */
     lcount = (p4est_locidx_t) numbers->elem_count;
@@ -345,8 +348,11 @@ consecutive_numbers (p4est_dune_numbers_t * dn,
   /* renumber nodes to contiguous subrange */
   newnums = P4EST_ALLOC (p4est_locidx_t, num_local_nodes);
   for (j = 0; j < P4EST_DIM; ++j) {
+    P4EST_ASSERT (*dim_results[j] == 0);
+    if ((numbers = dim_numbers[j]) == NULL) {
+      continue;
+    }
     mask_byte = 1 << j;
-    numbers = dim_numbers[j];
     memset (newnums, -1, num_local_nodes * sizeof (*newnums));
     ncount = 0;
 
@@ -382,7 +388,7 @@ p4est_dune_numbers_new (p4est_t * p4est, p4est_ghost_t * ghost,
   p4est_dune_numbers_t *dn;
   p4est_dune_numbers_params_t *pa;
   p4est_lnodes_t     *ln;
-  p4est_locidx_t      lne;
+  p4est_locidx_t      lne, lnums;
 
   /* formally verify arguments */
   P4EST_ASSERT (p4est != NULL);
@@ -424,11 +430,14 @@ p4est_dune_numbers_new (p4est_t * p4est, p4est_ghost_t * ghost,
   }
   generate_numbers (dn, ln);
 
-  /* transform numbering into contiguous ranges per codimension */
-  consecutive_numbers (dn, ln->num_local_nodes);
-
-  /* clean internal state and return */
+  /* free temporary data */
+  lnums = ln->num_local_nodes;
   p4est_lnodes_destroy (ln);
+
+  /* transform numbering into contiguous ranges per codimension */
+  consecutive_numbers (dn, lnums);
+
+  /* that's it! */
   return dn;
 }
 
