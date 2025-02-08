@@ -360,6 +360,30 @@ void                p8est_connectivity_get_neighbor_transforms
 
 /* *INDENT-ON* */
 
+/** Determine the owning tree for a coordinate and transform it there.
+ *
+ * On a boundary between trees, different coordinate systems meet.
+ * A coordinate on a tree boundary face, edge, or corner generated from the
+ * perspective of a specific tree may be transformed into any other touching
+ * tree's coordinate system and still refer to the same point in the mesh.
+ *
+ * To uniquely identify a coordinate, this function identifies the lowest
+ * numbered tree touching this coordinate and transforms the coordinate into
+ * that system.  The result can be used e. g. in topology hash tables.
+ *
+ * \param [in] conn     A valid connectivity.
+ * \param [in] treeid   The original tree index for this coordinate tuple.
+ * \param [in] coords   A valid coordinate 2-tuple relative to \a treeid.
+ * \param [out] treeid_out   The lowest tree index touching the coordinate.
+ * \param [out] coords_out   The input coordinates, if necessary after
+ *                           transformation into the system of the lowest
+ *                           numbered tree, returned in \a treeid_out.
+ */
+void                p8est_connectivity_coordinates_canonicalize
+  (p8est_connectivity_t *conn,
+   p4est_topidx_t treeid, const p4est_qcoord_t coords[],
+   p4est_topidx_t *treeid_out, p4est_qcoord_t coords_out[]);
+
 /** Store the boundary point of the volume in [0, P8EST_INSUL). */
 extern const int    p8est_volume_point;
 
@@ -714,6 +738,12 @@ p8est_connectivity_t *p8est_connectivity_new_twowrap (void);
  */
 p8est_connectivity_t *p8est_connectivity_new_rotcubes (void);
 
+/** Create a connectivity structure for two trees on top of each other.
+ * This connectivity is meant to be used with \ref p8est_geometry_new_pillow
+ * to map a spherical shell.
+ */
+p8est_connectivity_t *p8est_connectivity_new_pillow (void);
+
 /** An m by n by p array with periodicity in x, y, and z if
  * periodic_a, periodic_b, and periodic_c are true, respectively.
  */
@@ -975,7 +1005,7 @@ int                 p8est_connectivity_is_equivalent (p8est_connectivity_t *
 /** Return a pointer to a p8est_edge_transform_t array element. */
 /*@unused@*/
 static inline p8est_edge_transform_t *
-p8est_edge_array_index (sc_array_t * array, size_t it)
+p8est_edge_array_index (sc_array_t *array, size_t it)
 {
   P4EST_ASSERT (array->elem_size == sizeof (p8est_edge_transform_t));
   P4EST_ASSERT (it < array->elem_count);
@@ -987,7 +1017,7 @@ p8est_edge_array_index (sc_array_t * array, size_t it)
 /** Return a pointer to a p8est_corner_transform_t array element. */
 /*@unused@*/
 static inline p8est_corner_transform_t *
-p8est_corner_array_index (sc_array_t * array, size_t it)
+p8est_corner_array_index (sc_array_t *array, size_t it)
 {
   P4EST_ASSERT (array->elem_size == sizeof (p8est_corner_transform_t));
   P4EST_ASSERT (it < array->elem_count);
