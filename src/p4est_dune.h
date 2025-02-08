@@ -24,8 +24,13 @@
 
 /** \file p4est_dune.h
  *
- * Populate element corner and face number tables to interface to DUNE.
- * The range for each codimension begins with 0 and is contiguous.
+ * Provide various functions to interface dune to a p4est mesh.
+ *
+ * For example, populate element corner and face number tables, where the
+ * range for each codimension begins with 0 and is contiguous.
+ *
+ * We also provide a variant of the iterator that visits all small face
+ * quadrant separately.
  *
  * \ingroup p4est
  */
@@ -33,7 +38,7 @@
 #ifndef P4EST_DUNE_H
 #define P4EST_DUNE_H
 
-#include <p4est_ghost.h>
+#include <p4est_iterate.h>
 
 SC_EXTERN_C_BEGIN;
 
@@ -108,6 +113,36 @@ p4est_dune_numbers_t *p4est_dune_numbers_new (p4est_t * p4est,
  *                      p4est_dune_numbers_new are deallocated.
  */
 void                p4est_dune_numbers_destroy (p4est_dune_numbers_t * dn);
+
+/** Execute user supplied callbacks at every local volume and face.
+ *
+ * Execute the user-supplied callback functions at every volume and face in
+ * the local forest.  When multiple small quadrants are on the other side of
+ * the face of a large quadrant, the callback is executed for every small
+ * face neighbor in turn, with the same large quadrant on the other side.
+ * The \a user_data pointer is not touched by the iteroter, only passed to
+ * each of the callbacks.  Any of the callbacks may be NULL.
+ * The callback functions are interspersed with each other, i.e. some face
+ * callbacks will occur between volume callbacks:
+ *
+ * 1) Volume callbacks occur in the sorted Morton-index order.
+ * 2) A face callback is not executed until after the volume callbacks have
+ *    been executed for the quadrants that share it.
+ * 3) Callbacks are not executed at faces that only involve ghost
+ *    quadrants, i.e. that are not adjacent in the local section of the
+ *    forest.
+ *
+ * \param[in] p4est          The forest to iterate over.
+ * \param[in] ghost_layer    Required valid ghost structure.
+ * \param[in,out] user_data  optional context to supply to each callback.
+ * \param[in] iter_volume    callback function for every quadrant interior.
+ * \param[in] iter_face      callback function for every face between.
+ */
+void                p4est_dune_iterate (p4est_t * p4est,
+                                        p4est_ghost_t * ghost_layer,
+                                        void *user_data,
+                                        p4est_iter_volume_t iter_volume,
+                                        p4est_iter_face_t iter_face);
 
 SC_EXTERN_C_END;
 

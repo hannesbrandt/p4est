@@ -79,6 +79,12 @@ refine_callback (p4est_t * p4est,
   return 0;
 }
 
+static void
+run_dune_iterator (p4est_t *p4est, p4est_ghost_t *ghost)
+{
+  p4est_dune_iterate (p4est, ghost, NULL, NULL, NULL);
+}
+
 static int
 run_dune_interface (sc_MPI_Comm mpicomm, p4est_connectivity_t * conn,
                     int maxlevel)
@@ -140,6 +146,9 @@ run_dune_interface (sc_MPI_Comm mpicomm, p4est_connectivity_t * conn,
     /* free memory in generated interface */
     p4est_dune_numbers_destroy (dn);
   }
+
+  /* run face iterator */
+  run_dune_iterator (p4est, ghost);
 
   /* deallocate temporary structure */
   p4est_ghost_destroy (ghost);

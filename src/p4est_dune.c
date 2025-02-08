@@ -459,3 +459,18 @@ p4est_dune_numbers_destroy (p4est_dune_numbers_t * dn)
   }
   P4EST_FREE (dn);
 }
+
+void
+p4est_dune_iterate (p4est_t * p4est, p4est_ghost_t * ghost_layer,
+                    void *user_data, p4est_iter_volume_t iter_volume,
+                    p4est_iter_face_t iter_face)
+{
+  P4EST_ASSERT (p4est != NULL);
+  P4EST_ASSERT (ghost_layer != NULL);
+
+  p4est_iterate (p4est, ghost_layer, user_data, iter_volume, iter_face,
+#ifdef P4_TO_P8
+                 NULL,
+#endif
+                 NULL);
+}

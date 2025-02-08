@@ -652,6 +652,7 @@
 #define p4est_dune_numbers_params_init  p8est_dune_numbers_params_init
 #define p4est_dune_numbers_new          p8est_dune_numbers_new
 #define p4est_dune_numbers_destroy      p8est_dune_numbers_destroy
+#define p4est_dune_iterate              p8est_dune_iterate
 
 /* functions in p4est_connrefine */
 #define p4est_connectivity_refine       p8est_connectivity_refine
