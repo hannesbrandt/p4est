@@ -567,7 +567,7 @@ dune_iter_face (p4est_iter_face_info_t * info, void *user_data)
     fh->is.hanging.quad[0] = sh->is.hanging.quad[i];
     fh->is.hanging.quadid[0] = sh->is.hanging.quadid[i];
 
-    /* abuse the second information to store this face's sequence number */
+    /* abuse the second position to store this face's sequence number */
     fh->is.hanging.quadid[1] = i;
 
     /* execute callback for this face pairing */
@@ -593,6 +593,7 @@ p4est_dune_iterate (p4est_t * p4est, p4est_ghost_t * ghost_layer,
   }
   else {
     /* we need to translate the face iteration calls */
+    p4est_iter_face_info_t *finfo;
     p4est_dune_iter_t   sdune_iter, *dune_iter = &sdune_iter;
     memset (dune_iter, 0, sizeof (*dune_iter));
 
@@ -603,12 +604,11 @@ p4est_dune_iterate (p4est_t * p4est, p4est_ghost_t * ghost_layer,
     dune_iter->user_data = user_data;
 
     /* prepare internal context */
-    dune_iter->finfo = &dune_iter->sfinfo;
-    dune_iter->finfo->p4est = p4est;
-    dune_iter->finfo->ghost_layer = ghost_layer;
-    sc_array_init_count (&dune_iter->finfo->sides,
-                         sizeof (p4est_iter_face_side_t), 2);
-    sc_array_memset (&dune_iter->finfo->sides, 0);
+    finfo = dune_iter->finfo = &dune_iter->sfinfo;
+    finfo->p4est = p4est;
+    finfo->ghost_layer = ghost_layer;
+    sc_array_init_count (&finfo->sides, sizeof (p4est_iter_face_side_t), 2);
+    sc_array_memset (&finfo->sides, 0);
 
     /* wrapped iterator call */
     p4est_iterate (p4est, ghost_layer, dune_iter,
@@ -620,7 +620,7 @@ p4est_dune_iterate (p4est_t * p4est, p4est_ghost_t * ghost_layer,
 #endif
                    NULL);
 
-    /* free memory */
-    sc_array_reset (&dune_iter->finfo->sides);
+    /* free work memory */
+    sc_array_reset (&finfo->sides);
   }
 }
