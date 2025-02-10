@@ -460,6 +460,70 @@ p4est_dune_numbers_destroy (p4est_dune_numbers_t * dn)
   P4EST_FREE (dn);
 }
 
+typedef struct p4est_dune_iter
+{
+  p4est_t            *p4est;
+  p4est_iter_volume_t iter_volume;
+  p4est_iter_face_t   iter_face;
+  void               *user_data;
+}
+p4est_dune_iter_t;
+
+static void
+dune_iter_volume (p4est_iter_volume_info_t * info, void *user_data)
+{
+  p4est_dune_iter_t  *dune_iter = (p4est_dune_iter_t *) user_data;
+
+  /* consistency checks */
+  P4EST_ASSERT (info != NULL);
+  P4EST_ASSERT (dune_iter != NULL);
+  P4EST_ASSERT (dune_iter->p4est == info->p4est);
+
+  /* unwrap volume iteration callback */
+  P4EST_ASSERT (dune_iter->iter_volume != NULL);
+  dune_iter->iter_volume (info, dune_iter->user_data);
+}
+
+static void
+dune_iter_face (p4est_iter_face_info_t * info, void *user_data)
+{
+  p4est_dune_iter_t  *dune_iter = (p4est_dune_iter_t *) user_data;
+  p4est_iter_face_side_t *s[2];
+  int                 i;
+
+  /* consistency checks */
+  P4EST_ASSERT (info != NULL);
+  P4EST_ASSERT (dune_iter != NULL);
+  P4EST_ASSERT (dune_iter->p4est == info->p4est);
+
+  /* unwrap face callback */
+  P4EST_ASSERT (dune_iter->iter_face != NULL);
+
+  /* examine face boundary situation */
+  P4EST_ASSERT (info->sides.elem_count > 0);
+  if (info->sides.elem_count == 1) {
+    /* this face is on a physical boundary */
+    dune_iter->iter_face (info, dune_iter->user_data);
+    return;
+  }
+
+  /* examine hanging face situation */
+  P4EST_ASSERT (info->sides.elem_count == 2);
+  for (i = 0; i < 2; ++i) {
+    s[i] = (p4est_iter_face_side_t *) sc_array_index_int (&info->sides, i);
+    P4EST_ASSERT (0 <= s[i]->face && s[i]->face < P4EST_FACES);
+  }
+  if (!s[0]->is_hanging && !s[1]->is_hanging) {
+    dune_iter->iter_face (info, dune_iter->user_data);
+    return;
+  }
+
+  /* we have precisely one hanging face.  Reconstruct info */
+  P4EST_ASSERT (s[0]->is_hanging != s[1]->is_hanging);
+
+  /* TO DO: continue */
+}
+
 void
 p4est_dune_iterate (p4est_t * p4est, p4est_ghost_t * ghost_layer,
                     void *user_data, p4est_iter_volume_t iter_volume,
@@ -468,9 +532,31 @@ p4est_dune_iterate (p4est_t * p4est, p4est_ghost_t * ghost_layer,
   P4EST_ASSERT (p4est != NULL);
   P4EST_ASSERT (ghost_layer != NULL);
 
-  p4est_iterate (p4est, ghost_layer, user_data, iter_volume, iter_face,
+  if (iter_face == NULL) {
+    /* no need to do anything special: pass through */
+    p4est_iterate (p4est, ghost_layer, user_data, iter_volume, NULL,
 #ifdef P4_TO_P8
-                 NULL,
+                   NULL,
 #endif
-                 NULL);
+                   NULL);
+  }
+  else {
+    /* we need to translate the face iteration calls */
+    p4est_dune_iter_t   sdune_iter, *dune_iter = &sdune_iter;
+
+    dune_iter->p4est = p4est;
+    dune_iter->iter_volume = iter_volume;
+    dune_iter->iter_face = iter_face;
+    dune_iter->user_data = user_data;
+
+    /* wrapped iterator call */
+    p4est_iterate (p4est, ghost_layer, dune_iter,
+                   iter_volume != NULL ? dune_iter_volume : NULL,
+                   /* we know this is not NULL here, regardless */
+                   iter_face != NULL ? dune_iter_face : NULL,
+#ifdef P4_TO_P8
+                   NULL,
+#endif
+                   NULL);
+  }
 }
