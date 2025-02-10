@@ -79,10 +79,55 @@ refine_callback (p4est_t * p4est,
   return 0;
 }
 
+typedef struct p4est_dune_iter_context
+{
+  p4est_locidx_t      num_volumes;
+  p4est_locidx_t      num_faces;
+}
+p4est_dune_iter_context_t;
+
+static void
+p4est_dune_volume_iter (p4est_iter_volume_info_t *info, void *user_data)
+{
+  p4est_dune_iter_context_t *c = (p4est_dune_iter_context_t *) user_data;
+
+  P4EST_ASSERT (c != NULL);
+  ++c->num_volumes;
+}
+
+static void
+p4est_dune_face_iter (p4est_iter_face_info_t *info, void *user_data)
+{
+  p4est_dune_iter_context_t *c = (p4est_dune_iter_context_t *) user_data;
+
+  P4EST_ASSERT (c != NULL);
+  ++c->num_faces;
+}
+
 static void
 run_dune_iterator (p4est_t *p4est, p4est_ghost_t *ghost)
 {
+  p4est_dune_iter_context_t scontext, *context = &scontext;
+
+  /* empty iteration */
   p4est_dune_iterate (p4est, ghost, NULL, NULL, NULL);
+
+  /* iterate over volumes only */
+  context->num_volumes = context->num_faces = 0;
+  p4est_dune_iterate (p4est, ghost, context, p4est_dune_volume_iter, NULL);
+  SC_CHECK_ABORT (context->num_volumes == p4est->local_num_quadrants,
+                  "volume iteration count mismatch");
+  SC_CHECK_ABORT (context->num_faces == 0, "face iteration nonzero count");
+
+  /* iterate over volumes and faces */
+  context->num_volumes = context->num_faces = 0;
+  p4est_dune_iterate (p4est, ghost, context,
+                      p4est_dune_volume_iter, p4est_dune_face_iter);
+  SC_CHECK_ABORT (context->num_volumes == p4est->local_num_quadrants,
+                  "face iteration count mismatch");
+
+  /* print simple diagnostic message */
+  P4EST_INFOF ("Iterated over %ld local faces\n", (long) context->num_faces);
 }
 
 static int
