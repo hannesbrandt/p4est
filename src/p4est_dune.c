@@ -494,8 +494,10 @@ dune_iter_face (p4est_iter_face_info_t * info, void *user_data)
 {
   p4est_dune_iter_t  *dune_iter = (p4est_dune_iter_t *) user_data;
   p4est_iter_face_info_t *finfo;
-  p4est_iter_face_side_t *s[2];
+  p4est_iter_face_side_t *s[2], *sh;
+  p4est_iter_face_side_t *f[2], *fh;
   int                 i;
+  int                 fside, hside;
 
   /* consistency checks */
   P4EST_ASSERT (info != NULL);
@@ -524,14 +526,53 @@ dune_iter_face (p4est_iter_face_info_t * info, void *user_data)
     return;
   }
 
-  /* we have precisely one hanging face.  Reconstruct info */
+  /* we have precisely one hanging face.  Reconstruct its info */
   P4EST_ASSERT (s[0]->is_hanging != s[1]->is_hanging);
   finfo = dune_iter->finfo;
   P4EST_ASSERT (finfo != NULL);
   P4EST_ASSERT (finfo->sides.elem_size == sizeof (p4est_iter_face_side_t));
   P4EST_ASSERT (finfo->sides.elem_count == 2);
+  if (s[0]->is_hanging) {
+    hside = 0;
+    fside = 1;
+  }
+  else {
+    hside = 1;
+    fside = 0;
+  }
+  P4EST_ASSERT (s[hside]->is_hanging);
+  P4EST_ASSERT (!s[fside]->is_hanging);
+  for (i = 0; i < 2; ++i) {
+    f[i] = (p4est_iter_face_side_t *) sc_array_index_int (&finfo->sides, i);
+  }
 
-  /* TO DO: continue */
+  /* copy full side information as is and prepare setting the other side */
+  *f[fside] = *s[fside];
+  sh = s[hside];
+  fh = f[hside];
+  fh->treeid = sh->treeid;
+  fh->face = sh->face;
+  fh->is_hanging = sh->is_hanging;
+  P4EST_ASSERT (fh->is_hanging);
+
+  /* iterate over the hanging face neighbors */
+  for (i = 0; i < P4EST_HALF; ++i) {
+    if (s[fside]->is.full.is_ghost && sh->is.hanging.is_ghost[i]) {
+      /* if both sides are remote, we do nothing for this pair */
+      continue;
+    }
+
+    /* we copy the hanging face into the first position */
+    fh->is.hanging.is_ghost[0] = sh->is.hanging.is_ghost[i];
+    fh->is.hanging.quad[0] = sh->is.hanging.quad[i];
+    fh->is.hanging.quadid[0] = sh->is.hanging.quadid[i];
+
+    /* abuse the second information to store this face's sequence number */
+    fh->is.hanging.quadid[1] = i;
+
+    /* execute callback for this face pairing */
+    dune_iter->iter_face (finfo, dune_iter->user_data);
+  }
 }
 
 void
@@ -567,6 +608,7 @@ p4est_dune_iterate (p4est_t * p4est, p4est_ghost_t * ghost_layer,
     dune_iter->finfo->ghost_layer = ghost_layer;
     sc_array_init_count (&dune_iter->finfo->sides,
                          sizeof (p4est_iter_face_side_t), 2);
+    sc_array_memset (&dune_iter->finfo->sides, 0);
 
     /* wrapped iterator call */
     p4est_iterate (p4est, ghost_layer, dune_iter,
@@ -577,5 +619,8 @@ p4est_dune_iterate (p4est_t * p4est, p4est_ghost_t * ghost_layer,
                    NULL,
 #endif
                    NULL);
+
+    /* free memory */
+    sc_array_reset (&dune_iter->finfo->sides);
   }
 }
