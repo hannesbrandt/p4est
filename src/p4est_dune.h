@@ -29,8 +29,8 @@
  * For example, populate element corner and face number tables, where the
  * range for each codimension begins with 0 and is contiguous.
  *
- * We also provide a variant of the iterator that visits all small face
- * quadrant separately.
+ * We also provide a face-only variant of the iterator that visits all small
+ * quadrants on one side of a hanging face from separate callbacks in order.
  *
  * \ingroup p4est
  */
@@ -120,17 +120,27 @@ void                p4est_dune_numbers_destroy (p4est_dune_numbers_t * dn);
  * the local forest.  When multiple small quadrants are on the other side of
  * the face of a large quadrant, the callback is executed for every small
  * face neighbor in turn, with the same large quadrant on the other side.
- * The \a user_data pointer is not touched by the iteroter, only passed to
+ * The \a user_data pointer is not touched by the iterator, only passed to
  * each of the callbacks.  Any of the callbacks may be NULL.
  * The callback functions are interspersed with each other, i.e. some face
  * callbacks will occur between volume callbacks:
  *
- * 1) Volume callbacks occur in the sorted Morton-index order.
- * 2) A face callback is not executed until after the volume callbacks have
+ * 1. Volume callbacks occur in the sorted Morton-index order.
+ * 2. A face callback is not executed until after the volume callbacks have
  *    been executed for the quadrants that share it.
- * 3) Callbacks are not executed at faces that only involve ghost
+ * 3. The face callbacks for the small elements at the same hanging face
+ *    are executed right after each other in their Morton-index order.
+ * 4. Callbacks are not executed at faces that only involve ghost
  *    quadrants, i.e. that are not adjacent in the local section of the
  *    forest.
+ *
+ * The convention for the context information passed to the callbacks
+ * is the same as for \ref p4est_iterate with the following exception:
+ * For a hanging face, we call the callback anew for every small neighbor
+ * quadrant with the same large neighbor quadrant.  The hanging side data
+ * (see \ref p4est_iter_face_side_hanging_t) is populated at index [0] each
+ * time, and we store the number of the small quadrant within the order of
+ * its face siblings in the variable is.hanging.quadid[1], values in [0, 2).
  *
  * \param[in] p4est          The forest to iterate over.
  * \param[in] ghost_layer    Required valid ghost structure.
