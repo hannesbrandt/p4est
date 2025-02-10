@@ -462,10 +462,15 @@ p4est_dune_numbers_destroy (p4est_dune_numbers_t * dn)
 
 typedef struct p4est_dune_iter
 {
+  /* wrapped iteration context */
   p4est_t            *p4est;
   p4est_iter_volume_t iter_volume;
   p4est_iter_face_t   iter_face;
   void               *user_data;
+
+  /* this structure will be reused many times */
+  p4est_iter_face_info_t sfinfo;
+  p4est_iter_face_info_t *finfo;
 }
 p4est_dune_iter_t;
 
@@ -488,6 +493,7 @@ static void
 dune_iter_face (p4est_iter_face_info_t * info, void *user_data)
 {
   p4est_dune_iter_t  *dune_iter = (p4est_dune_iter_t *) user_data;
+  p4est_iter_face_info_t *finfo;
   p4est_iter_face_side_t *s[2];
   int                 i;
 
@@ -520,6 +526,10 @@ dune_iter_face (p4est_iter_face_info_t * info, void *user_data)
 
   /* we have precisely one hanging face.  Reconstruct info */
   P4EST_ASSERT (s[0]->is_hanging != s[1]->is_hanging);
+  finfo = dune_iter->finfo;
+  P4EST_ASSERT (finfo != NULL);
+  P4EST_ASSERT (finfo->sides.elem_size == sizeof (p4est_iter_face_side_t));
+  P4EST_ASSERT (finfo->sides.elem_count == 2);
 
   /* TO DO: continue */
 }
@@ -543,11 +553,20 @@ p4est_dune_iterate (p4est_t * p4est, p4est_ghost_t * ghost_layer,
   else {
     /* we need to translate the face iteration calls */
     p4est_dune_iter_t   sdune_iter, *dune_iter = &sdune_iter;
+    memset (dune_iter, 0, sizeof (*dune_iter));
 
+    /* remember wrapped information */
     dune_iter->p4est = p4est;
     dune_iter->iter_volume = iter_volume;
     dune_iter->iter_face = iter_face;
     dune_iter->user_data = user_data;
+
+    /* prepare internal context */
+    dune_iter->finfo = &dune_iter->sfinfo;
+    dune_iter->finfo->p4est = p4est;
+    dune_iter->finfo->ghost_layer = ghost_layer;
+    sc_array_init_count (&dune_iter->finfo->sides,
+                         sizeof (p4est_iter_face_side_t), 2);
 
     /* wrapped iterator call */
     p4est_iterate (p4est, ghost_layer, dune_iter,
