@@ -664,18 +664,18 @@ p4est_quad_nonb_is_equal (const void *v1, const void *v2, const void *u)
 typedef struct p4est_dune_nonb
 {
   /* general context */
-  p4est_t             *p4est;
-  p4est_ghost_t       *ghost;
-  void                *user_data;
-  p4est_iter_volume_t  iter_volume;
-  p4est_iter_face_t    iter_face;
+  p4est_t            *p4est;
+  p4est_ghost_t      *ghost;
+  void               *user_data;
+  p4est_iter_volume_t iter_volume;
+  p4est_iter_face_t   iter_face;
 
   /* containers and data */
-  sc_hash_t           *qhash;
-  sc_mempool_t        *qpool;
+  sc_hash_t          *qhash;
+  sc_mempool_t       *qpool;
 
   /* state of recursion */
-  p4est_tree_t        *tree;
+  p4est_tree_t       *tree;
   p4est_iter_volume_info_t vinfo;
 }
 p4est_dune_nonb_t;
@@ -787,8 +787,7 @@ p4est_dune_iterate_nonb (p4est_t * p4est, p4est_ghost_t * ghost_layer,
   nonb->iter_volume = iter_volume;
   nonb->iter_face = iter_face;
   nonb->qhash = sc_hash_new (p4est_quad_nonb_hash,
-                             p4est_quad_nonb_is_equal,
-                             nonb, NULL);
+                             p4est_quad_nonb_is_equal, nonb, NULL);
   nonb->qpool = sc_mempool_new (sizeof (p4est_quad_nonb_t));
 
   /* prepare reusable volume context */

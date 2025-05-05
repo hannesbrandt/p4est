@@ -102,8 +102,7 @@ p4est_dune_volume_iter (p4est_iter_volume_info_t *info, void *user_data)
     c->tree = p4est_tree_array_index (c->p4est->trees,
                                       c->treeid = info->treeid);
   }
-  P4EST_ASSERT (c->tree->quadrants_offset + info->quadid ==
-                c->num_volumes);
+  P4EST_ASSERT (c->tree->quadrants_offset + info->quadid == c->num_volumes);
 
   ++c->num_volumes;
 }
