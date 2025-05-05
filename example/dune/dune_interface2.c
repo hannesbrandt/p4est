@@ -81,6 +81,10 @@ refine_callback (p4est_t * p4est,
 
 typedef struct p4est_dune_iter_context
 {
+  p4est_t            *p4est;
+  p4est_topidx_t      treeid;
+  p4est_tree_t       *tree;
+
   p4est_locidx_t      num_volumes;
   p4est_locidx_t      num_faces;
 }
@@ -91,7 +95,16 @@ p4est_dune_volume_iter (p4est_iter_volume_info_t *info, void *user_data)
 {
   p4est_dune_iter_context_t *c = (p4est_dune_iter_context_t *) user_data;
 
+  P4EST_ASSERT (info != NULL);
   P4EST_ASSERT (c != NULL);
+
+  if (info->treeid > c->treeid) {
+    c->tree = p4est_tree_array_index (c->p4est->trees,
+                                      c->treeid = info->treeid);
+  }
+  P4EST_ASSERT (c->tree->quadrants_offset + info->quadid ==
+                c->num_volumes);
+
   ++c->num_volumes;
 }
 
@@ -100,7 +113,9 @@ p4est_dune_face_iter (p4est_iter_face_info_t *info, void *user_data)
 {
   p4est_dune_iter_context_t *c = (p4est_dune_iter_context_t *) user_data;
 
+  P4EST_ASSERT (info != NULL);
   P4EST_ASSERT (c != NULL);
+
   ++c->num_faces;
 }
 
@@ -108,11 +123,14 @@ static void
 run_dune_iterator (p4est_t *p4est, p4est_ghost_t *ghost)
 {
   p4est_dune_iter_context_t scontext, *context = &scontext;
+  context->p4est = p4est;
 
   /* empty iteration */
   p4est_dune_iterate (p4est, ghost, NULL, NULL, NULL);
 
   /* iterate over volumes only */
+  context->treeid = -1;
+  context->tree = NULL;
   context->num_volumes = context->num_faces = 0;
   p4est_dune_iterate (p4est, ghost, context, p4est_dune_volume_iter, NULL);
   SC_CHECK_ABORT (context->num_volumes == p4est->local_num_quadrants,
@@ -120,6 +138,8 @@ run_dune_iterator (p4est_t *p4est, p4est_ghost_t *ghost)
   SC_CHECK_ABORT (context->num_faces == 0, "face iteration nonzero count");
 
   /* iterate over volumes and faces */
+  context->treeid = -1;
+  context->tree = NULL;
   context->num_volumes = context->num_faces = 0;
   p4est_dune_iterate (p4est, ghost, context,
                       p4est_dune_volume_iter, p4est_dune_face_iter);
