@@ -629,12 +629,19 @@ p4est_dune_iterate_wrap (p4est_t * p4est, p4est_ghost_t * ghost_layer,
   }
 }
 
-/* The complete quadrant context for the recursion */
+/** The complete quadrant context for the recursion. */
 typedef struct p4est_quad_nonb
 {
+  /* Valid quadrant with valid p.which_tree member. */
   p4est_quadrant_t    skey;
+
+  /* Number relative to tree of first local descendant of skey. */
   p4est_locidx_t      quadid;
+
+  /* View on local quadrants that are descendants of skey. */
   sc_array_t          squads;
+
+  /** If skey is equal to a leaf, this is all zeroes. */
   size_t              split[P4EST_CHILDREN + 1];
 }
 p4est_quad_nonb_t;
@@ -660,7 +667,7 @@ p4est_quad_nonb_is_equal (const void *v1, const void *v2, const void *u)
   return p4est_quadrant_is_equal_piggy (&n1->skey, &n2->skey);
 }
 
-/* Global context object for non-balanced volume & face iterator */
+/** Global context object for non-balanced volume & face iterator. */
 typedef struct p4est_dune_nonb
 {
   /* general context */
@@ -710,7 +717,8 @@ p4est_dune_nonb_volume (p4est_dune_nonb_t *nonb, p4est_quad_nonb_t *nquad)
   P4EST_ASSERT (nquad != NULL);
   P4EST_ASSERT (p4est_quadrant_is_valid (&nquad->skey));
 
-  /* invariant on call: there is at least one quadrant below the current level */
+  /* precondition: there is at least one quadrant below the current level */
+  p4est_split_array (&nquad->squads, nquad->skey.level, nquad->split);
 
   /* loop through all children of current quadrant */
   p4est_quadrant_childrenv (&nquad->skey, children);
@@ -722,7 +730,7 @@ p4est_dune_nonb_volume (p4est_dune_nonb_t *nonb, p4est_quad_nonb_t *nquad)
 
     /* setup recursion quadrant object */
     nchild = p4est_dune_nquad_alloc (nonb);
-    P4EST_QUADRANT_INIT (&nchild->skey);
+    memset (nchild, 0, sizeof (*nchild));
     p4est_quadrant_copy (&children[i], &nchild->skey);
     nchild->skey.p.which_tree = nonb->vinfo.treeid;
     nchild->quadid = nquad->quadid + (p4est_locidx_t) oz;
@@ -749,10 +757,6 @@ p4est_dune_nonb_volume (p4est_dune_nonb_t *nonb, p4est_quad_nonb_t *nquad)
 
     /* we go into the general recursion algorithm */
     if (tquad == NULL) {
-      tquad = &nchild->skey;
-      p4est_split_array (tquads, tquad->level, nchild->split);
-
-      /* call the volume recursion */
       p4est_dune_nonb_volume (nonb, nchild);
     }
 
@@ -805,10 +809,9 @@ p4est_dune_iterate_nonb (p4est_t * p4est, p4est_ghost_t * ghost_layer,
 
     /* setup recursion quadrant object */
     nquad = p4est_dune_nquad_alloc (nonb);
-    P4EST_QUADRANT_INIT (&nquad->skey);
+    memset (nquad, 0, sizeof (*nquad));
     p4est_quadrant_root (&nquad->skey);
     nquad->skey.p.which_tree = tt;
-    nquad->quadid = 0;
     sc_array_init_view (tquads = &nquad->squads, &nonb->tree->quadrants,
                         0, nonb->tree->quadrants.elem_count);
     P4EST_ASSERT (tquads->elem_count > 0);
@@ -833,10 +836,6 @@ p4est_dune_iterate_nonb (p4est_t * p4est, p4est_ghost_t * ghost_layer,
 
     /* we go into the general recursion algorithm */
     if (tquad == NULL) {
-      tquad = &nquad->skey;
-      p4est_split_array (tquads, tquad->level, nquad->split);
-
-      /* call the volume recursion */
       p4est_dune_nonb_volume (nonb, nquad);
     }
 
