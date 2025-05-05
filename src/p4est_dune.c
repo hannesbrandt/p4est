@@ -643,6 +643,15 @@ typedef struct p4est_quad_nonb
 
   /** If skey is equal to a leaf, this is all zeroes. */
   size_t              split[P4EST_CHILDREN + 1];
+
+  /* Number of first ghost that is a descendant of skey. */
+  p4est_locidx_t      ghostid;
+
+  /* View on ghosts that are descendants of skey. */
+  sc_array_t          ghosts;
+
+  /* If skey is equal to a leaf, this is all zeroes. */
+  size_t              gsplit[P4EST_CHILDREN + 1];
 }
 p4est_quad_nonb_t;
 
@@ -672,7 +681,7 @@ typedef struct p4est_dune_nonb
 {
   /* general context */
   p4est_t            *p4est;
-  p4est_ghost_t      *ghost;
+  p4est_ghost_t      *ghost_layer;
   void               *user_data;
   p4est_iter_volume_t iter_volume;
   p4est_iter_face_t   iter_face;
@@ -745,6 +754,7 @@ p4est_dune_nonb_volume (p4est_dune_nonb_t *nonb, p4est_quad_nonb_t *nquad)
 {
   int                 i, j, k;
   size_t              oz, lz;
+  size_t              goz, glz;
   p4est_quad_nonb_t  *nchild;
   p4est_quad_nonb_t  *nchildren[P4EST_CHILDREN];
   p4est_quad_nonb_t  *nface[2];
@@ -772,6 +782,9 @@ p4est_dune_nonb_volume (p4est_dune_nonb_t *nonb, p4est_quad_nonb_t *nquad)
 
   /* now there is at least one quadrant below the current level */
   p4est_split_array (&nquad->squads, nquad->skey.level, nquad->split);
+  if (nonb->ghost_layer != NULL) {
+    p4est_split_array (&nquad->ghosts, nquad->skey.level, nquad->gsplit);
+  }
 
   /* loop through all children of current quadrant */
   p4est_quadrant_childrenv (&nquad->skey, children);
@@ -785,6 +798,13 @@ p4est_dune_nonb_volume (p4est_dune_nonb_t *nonb, p4est_quad_nonb_t *nquad)
     nchild->skey.p.which_tree = nonb->vinfo.treeid;
     nchild->quadid = nquad->quadid + (p4est_locidx_t) oz;
     sc_array_init_view (&nchild->squads, &nquad->squads, oz, lz);
+
+    /* setup ghost information similarly */
+    if (nonb->ghost_layer != NULL) {
+      glz = nquad->gsplit[i + 1] - (goz = nquad->gsplit[i]);
+      nchild->ghostid = nquad->ghostid + (p4est_locidx_t) goz;
+      sc_array_init_view (&nchild->ghosts, &nquad->ghosts, goz, glz);
+    }
 
     /* we may have created an empty child context */
     if (lz == 0) {
@@ -817,6 +837,7 @@ p4est_dune_iterate_nonb (p4est_t * p4est, p4est_ghost_t * ghost_layer,
                          void *user_data, p4est_iter_volume_t iter_volume,
                          p4est_iter_face_t iter_face)
 {
+  size_t              goz, glz;
   p4est_topidx_t      tt;
   p4est_dune_nonb_t   snonb, *nonb = &snonb;
   p4est_quad_nonb_t  *nquad;
@@ -831,7 +852,7 @@ p4est_dune_iterate_nonb (p4est_t * p4est, p4est_ghost_t * ghost_layer,
   /* setup context data */
   memset (nonb, 0, sizeof (*nonb));
   nonb->p4est = p4est;
-  nonb->ghost = ghost_layer;
+  nonb->ghost_layer = ghost_layer;
   nonb->user_data = user_data;
   nonb->iter_volume = iter_volume;
   nonb->iter_face = iter_face;
@@ -852,13 +873,20 @@ p4est_dune_iterate_nonb (p4est_t * p4est, p4est_ghost_t * ghost_layer,
     nonb->tree = p4est_tree_array_index (p4est->trees, tt);
     nonb->vinfo.treeid = tt;
 
-    /* setup recursion quadrant object */
+    /* setup quadrant recursion state */
     nquad = p4est_dune_nquad_alloc (nonb);
     memset (nquad, 0, sizeof (*nquad));
     p4est_quadrant_root (&nquad->skey);
     nquad->skey.p.which_tree = tt;
     sc_array_init_view (&nquad->squads, &nonb->tree->quadrants,
                         0, nonb->tree->quadrants.elem_count);
+
+    /* setup ghost information similarly */
+    if (ghost_layer != NULL) {
+      goz = nquad->ghostid = ghost_layer->tree_offsets[tt];
+      glz = ghost_layer->tree_offsets[tt + 1] - goz;
+      sc_array_init_view (&nquad->ghosts, &ghost_layer->ghosts, goz, glz);
+    }
 
     /* we go into the general recursion algorithm */
     p4est_dune_nonb_volume (nonb, nquad);
