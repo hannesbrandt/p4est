@@ -702,13 +702,52 @@ p4est_dune_nquad_free (p4est_dune_nonb_t *nonb, p4est_quad_nonb_t *nquad)
   sc_mempool_free (nonb->qpool, nquad);
 }
 
+#ifndef P4_TO_P8
+static const int nonb_face_child[4][2] = {
+  { 0, 1 },
+  { 2, 3 },
+  { 0, 2 },
+  { 1, 3 },
+};
+#else
+static const int nonb_face_child[12][2] = {
+  { 0, 1 },
+  { 2, 3 },
+  { 4, 5 },
+  { 6, 7 },
+  { 0, 2 },
+  { 1, 3 },
+  { 4, 6 },
+  { 5, 7 },
+  { 0, 4 },
+  { 1, 5 },
+  { 2, 6 },
+  { 3, 7 },
+};
+#endif
+static const int nonb_face_number[3][2] = {
+  { 1, 0 },
+  { 3, 2 },
+  { 5, 4 }
+};
+
+/* called with fully initialized nquad contexts for this interface */
+static void
+p4est_dune_nonb_face (p4est_dune_nonb_t *nonb,
+                      p4est_quad_nonb_t *nquads[2], const int faces[2])
+{
+
+}
+
 /* called with fully initialized nquad context for this volume */
 static void
 p4est_dune_nonb_volume (p4est_dune_nonb_t *nonb, p4est_quad_nonb_t *nquad)
 {
-  int                 i;
+  int                 i, j, k;
   size_t              oz, lz;
   p4est_quad_nonb_t  *nchild;
+  p4est_quad_nonb_t  *nchildren[P4EST_CHILDREN];
+  p4est_quad_nonb_t  *nface[2];
   p4est_quadrant_t    children[P4EST_CHILDREN];
   p4est_quadrant_t   *tquad;
 
@@ -737,24 +776,39 @@ p4est_dune_nonb_volume (p4est_dune_nonb_t *nonb, p4est_quad_nonb_t *nquad)
   /* loop through all children of current quadrant */
   p4est_quadrant_childrenv (&nquad->skey, children);
   for (i = 0; i < P4EST_CHILDREN; ++i) {
-    if ((lz = nquad->split[i + 1] - (oz = nquad->split[i])) == 0) {
-      /* empty child quadrant */
-      continue;
-    }
+    lz = nquad->split[i + 1] - (oz = nquad->split[i]);
 
     /* setup recursion quadrant object */
-    nchild = p4est_dune_nquad_alloc (nonb);
+    nchild = nchildren[i] = p4est_dune_nquad_alloc (nonb);
     memset (nchild, 0, sizeof (*nchild));
     p4est_quadrant_copy (&children[i], &nchild->skey);
     nchild->skey.p.which_tree = nonb->vinfo.treeid;
     nchild->quadid = nquad->quadid + (p4est_locidx_t) oz;
     sc_array_init_view (&nchild->squads, &nquad->squads, oz, lz);
 
+    /* we may have created an empty child context */
+    if (lz == 0) {
+      continue;
+    }
+
     /* we go into the general recursion algorithm */
     p4est_dune_nonb_volume (nonb, nchild);
+  }
+
+  /* call face recursion for all faces inside this volume */
+  for (k = 0, i = 0; i < P4EST_DIM; ++i) {
+    for (j = 0; j < P4EST_HALF; ++j, ++k) {
+      nface[0] = nchildren[nonb_face_child[k][0]];
+      nface[1] = nchildren[nonb_face_child[k][1]];
+      p4est_dune_nonb_face (nonb, nface, nonb_face_number[i]);
+    }
+  }
+
+  /* free temporary quadrant context */
+  for (i = 0; i < P4EST_CHILDREN; ++i) {
 
     /* free memory here.  For face recursion, will modify later */
-    p4est_dune_nquad_free (nonb, nchild);
+    p4est_dune_nquad_free (nonb, nchildren[i]);
   }
 }
 
