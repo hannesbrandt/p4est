@@ -711,13 +711,27 @@ p4est_dune_nonb_volume (p4est_dune_nonb_t *nonb, p4est_quad_nonb_t *nquad)
   p4est_quad_nonb_t  *nchild;
   p4est_quadrant_t    children[P4EST_CHILDREN];
   p4est_quadrant_t   *tquad;
-  sc_array_t         *tquads;
 
   P4EST_ASSERT (nonb != NULL);
   P4EST_ASSERT (nquad != NULL);
   P4EST_ASSERT (p4est_quadrant_is_valid (&nquad->skey));
 
-  /* precondition: there is at least one quadrant below the current level */
+  /* check special case of a single leaf quadrant */
+  if (nquad->squads.elem_count == 1) {
+    tquad = p4est_quadrant_array_index (&nquad->squads, 0);
+
+    /* if there is one real quadrant at this level, stop the recursion */
+    if (tquad->level == nquad->skey.level) {
+      nonb->vinfo.quad = tquad;
+      nonb->vinfo.quadid = nquad->quadid;
+      if (nonb->iter_volume != NULL) {
+        nonb->iter_volume (&nonb->vinfo, nonb->user_data);
+      }
+      return;
+    }
+  }
+
+  /* now there is at least one quadrant below the current level */
   p4est_split_array (&nquad->squads, nquad->skey.level, nquad->split);
 
   /* loop through all children of current quadrant */
@@ -734,31 +748,10 @@ p4est_dune_nonb_volume (p4est_dune_nonb_t *nonb, p4est_quad_nonb_t *nquad)
     p4est_quadrant_copy (&children[i], &nchild->skey);
     nchild->skey.p.which_tree = nonb->vinfo.treeid;
     nchild->quadid = nquad->quadid + (p4est_locidx_t) oz;
-    sc_array_init_view (tquads = &nchild->squads, &nquad->squads, oz, lz);
-    P4EST_ASSERT (tquads->elem_count > 0);
-
-    /* special case for a single quadrant */
-    tquad = NULL;
-    if (tquads->elem_count == 1) {
-      tquad = p4est_quadrant_array_index (tquads, 0);
-
-      /* if there is one real quadrant at this level, stop recursion */
-      if (tquad->level == nchild->skey.level) {
-        nonb->vinfo.quad = tquad;
-        nonb->vinfo.quadid = nchild->quadid;
-        if (nonb->iter_volume != NULL) {
-          nonb->iter_volume (&nonb->vinfo, nonb->user_data);
-        }
-      }
-      else {
-        tquad = NULL;
-      }
-    }
+    sc_array_init_view (&nchild->squads, &nquad->squads, oz, lz);
 
     /* we go into the general recursion algorithm */
-    if (tquad == NULL) {
-      p4est_dune_nonb_volume (nonb, nchild);
-    }
+    p4est_dune_nonb_volume (nonb, nchild);
 
     /* free memory here.  For face recursion, will modify later */
     p4est_dune_nquad_free (nonb, nchild);
@@ -773,8 +766,6 @@ p4est_dune_iterate_nonb (p4est_t * p4est, p4est_ghost_t * ghost_layer,
   p4est_topidx_t      tt;
   p4est_dune_nonb_t   snonb, *nonb = &snonb;
   p4est_quad_nonb_t  *nquad;
-  p4est_quadrant_t   *tquad;
-  sc_array_t         *tquads;
 
   P4EST_ASSERT (p4est != NULL);
 
@@ -812,32 +803,11 @@ p4est_dune_iterate_nonb (p4est_t * p4est, p4est_ghost_t * ghost_layer,
     memset (nquad, 0, sizeof (*nquad));
     p4est_quadrant_root (&nquad->skey);
     nquad->skey.p.which_tree = tt;
-    sc_array_init_view (tquads = &nquad->squads, &nonb->tree->quadrants,
+    sc_array_init_view (&nquad->squads, &nonb->tree->quadrants,
                         0, nonb->tree->quadrants.elem_count);
-    P4EST_ASSERT (tquads->elem_count > 0);
-
-    /* special case for a single quadrant */
-    tquad = NULL;
-    if (tquads->elem_count == 1) {
-      tquad = p4est_quadrant_array_index (tquads, 0);
-
-      /* if there is one real quadrant at this level, stop recursion */
-      if (tquad->level == nquad->skey.level) {
-        nonb->vinfo.quad = tquad;
-        nonb->vinfo.quadid = 0;
-        if (nonb->iter_volume != NULL) {
-          nonb->iter_volume (&nonb->vinfo, nonb->user_data);
-        }
-      }
-      else {
-        tquad = NULL;
-      }
-    }
 
     /* we go into the general recursion algorithm */
-    if (tquad == NULL) {
-      p4est_dune_nonb_volume (nonb, nquad);
-    }
+    p4est_dune_nonb_volume (nonb, nquad);
 
     /* free memory here.  For face recursion, will modify later */
     p4est_dune_nquad_free (nonb, nquad);
