@@ -749,13 +749,104 @@ static const int    nonb_face_number[3][2] = {
   {5, 4}
 };
 
+static void
+p4est_dune_nonb_full (p4est_quad_nonb_t *nq, p4est_iter_face_side_t *fside)
+{
+  P4EST_ASSERT (nq != NULL);
+  P4EST_ASSERT (fside != NULL);
+
+  /* initialize a full-size face side */
+  fside->is_hanging = 0;
+  memset (&fside->is, 0, sizeof (fside->is));
+
+  /* maybe there is one local quadrant */
+  if (nq->squads.elem_count == 1) {
+    P4EST_ASSERT (nq->ghosts.elem_count == 0);
+    P4EST_ASSERT (nq->nvdesc == -1);
+
+    /* this side is local */
+    fside->is.full.is_ghost = 0;
+    fside->is.full.quad = p4est_quadrant_array_index (&nq->squads, 0);
+    fside->is.full.quadid = nq->quadid;
+  }
+  else {
+    /* allow for ghost quadrants that should be there but aren't */
+    P4EST_ASSERT (nq->squads.elem_count == 0);
+    P4EST_ASSERT (nq->ghosts.elem_count <= 1);
+    P4EST_ASSERT (nq->nvdesc != -1);
+
+    /* this side is remote */
+    fside->is.full.is_ghost = 1;
+    if (nq->ghosts.elem_count == 0) {
+      /* ghost not present when it should be by the mesh logic */
+      P4EST_ASSERT (nq->nvdesc == 0);
+      fside->is.full.quad = NULL;
+      fside->is.full.quadid = -1;
+    }
+    else {
+      /* proper full size ghost quadrant */
+      P4EST_ASSERT (nq->nvdesc == -2);
+      fside->is.full.quad = p4est_quadrant_array_index (&nq->ghosts, 0);
+      fside->is.full.quadid = nq->ghostid;
+    }
+  }
+}
+
+static void
+p4est_dune_nonb_hanging (p4est_quad_nonb_t *nq,
+                         p4est_iter_face_side_t *fside, int ihang)
+{
+  P4EST_ASSERT (nq != NULL);
+  P4EST_ASSERT (fside != NULL);
+
+  /* initialize a hanging face side */
+  fside->is_hanging = 1;
+  memset (&fside->is, 0, sizeof (fside->is));
+
+  /* maybe there is one local quadrant */
+  if (nq->squads.elem_count == 1) {
+    P4EST_ASSERT (nq->ghosts.elem_count == 0);
+    P4EST_ASSERT (nq->nvdesc == -1);
+
+    /* this side is local */
+    fside->is.hanging.is_ghost[0] = 0;
+    fside->is.hanging.quad[0] = p4est_quadrant_array_index (&nq->squads, 0);
+    fside->is.hanging.quadid[0] = nq->quadid;
+  }
+  else {
+    /* allow for ghost quadrants that should be there but aren't */
+    P4EST_ASSERT (nq->squads.elem_count == 0);
+    P4EST_ASSERT (nq->ghosts.elem_count <= 1);
+    P4EST_ASSERT (nq->nvdesc != -1);
+
+    /* this side is remote */
+    fside->is.hanging.is_ghost[1] = 1;
+    if (nq->ghosts.elem_count == 0) {
+      /* ghost not present when it should be by the mesh logic */
+      P4EST_ASSERT (nq->nvdesc == 0);
+      fside->is.hanging.quad[0] = NULL;
+      fside->is.hanging.quadid[0] = -1;
+    }
+    else {
+      /* proper hanging ghost quadrant */
+      P4EST_ASSERT (nq->nvdesc == -2);
+      fside->is.hanging.quad[0] = p4est_quadrant_array_index (&nq->ghosts, 0);
+      fside->is.hanging.quadid[0] = nq->ghostid;
+    }
+  }
+
+  /* do not forget the hanging face number within parent face */
+  P4EST_ASSERT (0 <= ihang && ihang < P4EST_HALF);
+  fside->is.hanging.quadid[1] = ihang;
+}
+
 /* called with fully initialized nquad contexts for this interface */
 static void
 p4est_dune_nonb_face (p4est_dune_nonb_t *nonb,
-                      p4est_quad_nonb_t *nquads[2], const int faces[2])
+                      p4est_quad_nonb_t *nquads[2], int ih)
 {
   int                 i, j, k;
-  int                 hang[2];
+  int                 level[2];
   void              **lfound;
   p4est_iter_face_side_t *fside;
   p4est_quad_nonb_t  *nq, *fchildren[2][P4EST_HALF];
@@ -766,71 +857,57 @@ p4est_dune_nonb_face (p4est_dune_nonb_t *nonb,
   P4EST_ASSERT (nonb->finfo.orientation == 0);
   P4EST_ASSERT (nonb->finfo.sides.elem_count == 2);
   P4EST_ASSERT (nonb->iter_face != NULL);
+  P4EST_ASSERT (nquads != NULL);
+  P4EST_ASSERT (nquads[0] != NULL && nquads[1] != NULL);
 
   /* if there are no local quadrants on either side, we bail */
   if (nquads[0]->squads.elem_count == 0 && nquads[1]->squads.elem_count == 0) {
     return;
   }
 
+  /* figure out if we are already in a hanging situation */
+  for (k = 0; k < 2; ++k) {
+    level[k] = nquads[k]->skey.level;
+  }
+
   /* we will definitely execute the face callback or go into the recursion */
   for (k = 0; k < 2; ++k) {
+    nq = nquads[k];
     fside = (p4est_iter_face_side_t *)
       sc_array_index (&nonb->finfo.sides, k);
-    P4EST_ASSERT (nonb->vinfo.treeid == fside->treeid);
-    fside->face = faces[k];
-    nq = nquads[k];
-    P4EST_ASSERT (nonb->vinfo.treeid == nq->skey.p.which_tree);
 
-    /* determine hanging status of this side */
-    if (nq->nvdesc <= 0) {
+    /* investigate the various possible cases */
+    if (level[k] < level[!k]) {
+
+      /* if this is a larger side, it must be whole and stays unchanged */
+      P4EST_ASSERT (nq->nvdesc <= 0);
+      P4EST_ASSERT (!fside->is_hanging);
+    }
+    else if (nq->nvdesc <= 0) {
+
+      /* otherwise we must set new contents to the face side */
       P4EST_ASSERT (nq->squads.elem_count <= 1);
       P4EST_ASSERT (nq->ghosts.elem_count <= 1);
 
-      /* this side is either a full size quadrant or missing ghost(s) */
-      hang[k] = fside->is_hanging = 0;
-
-      /* this face side will be the same for any small neighbor faces */
-      if (nq->squads.elem_count == 1) {
-        P4EST_ASSERT (nq->ghosts.elem_count == 0);
-        P4EST_ASSERT (nq->nvdesc == -1);
-
-        /* this side is local */
-        fside->is.full.is_ghost = 0;
-        fside->is.full.quad = p4est_quadrant_array_index (&nq->squads, 0);
-        fside->is.full.quadid = nq->quadid;
+      /* same size is initalized as full */
+      if (level[0] == level[1]) {
+        p4est_dune_nonb_full (nq, fside);
       }
       else {
-        /* allow for ghost quadrants that should be there but aren't */
-        P4EST_ASSERT (nq->squads.elem_count == 0);
-        P4EST_ASSERT (nq->ghosts.elem_count <= 1);
-        P4EST_ASSERT (nq->nvdesc != -1);
+        P4EST_ASSERT (level[k] > level[!k]);
 
-        /* this side is remote */
-        fside->is.full.is_ghost = 1;
-        if (nq->ghosts.elem_count == 0) {
-          /* ghost not present when it should be by the mesh logic */
-          P4EST_ASSERT (nq->nvdesc == 0);
-          fside->is.full.quad = NULL;
-          fside->is.full.quadid = -1;
-        }
-        else {
-          /* proper full size ghost quadrant */
-          P4EST_ASSERT (nq->nvdesc == -2);
-          fside->is.full.quad = p4est_quadrant_array_index (&nq->ghosts, 0);
-          fside->is.full.quadid = nq->ghostid;
-        }
+        /* initialize a hanging side */
+        p4est_dune_nonb_hanging (nq, fside, ih);
       }
     }
     else {
-      /* mark hanging status for use below */
-      hang[k] = 1;
 
       /* prepare what's needed to loop over the children below */
       for (j = 0; j < P4EST_HALF; ++j) {
 
         /* access the child quadrants touching the face */
         memset (&nkey, 0, sizeof (nkey));
-        i = p4est_face_corners[faces[k]][j];
+        i = p4est_face_corners[fside->face][j];
         p4est_quadrant_child (&nq->skey, &nkey.skey, i);
         nkey.skey.p.which_tree = nq->skey.p.which_tree;
 #if 0
@@ -858,9 +935,9 @@ p4est_dune_nonb_face (p4est_dune_nonb_t *nonb,
     /* go down the face recursion */
     for (j = 0; j < P4EST_HALF; ++j) {
       for (k = 0; k < 2; ++k) {
-        cquads[k] = !hang[k] ? nquads[k] : fchildren[k][j];
+        cquads[k] = nquads[k]->nvdesc <= 0 ? nquads[k] : fchildren[k][j];
       }
-      p4est_dune_nonb_face (nonb, cquads, faces);
+      p4est_dune_nonb_face (nonb, cquads, j);
     }
   }
 }
@@ -869,7 +946,7 @@ p4est_dune_nonb_face (p4est_dune_nonb_t *nonb,
 static void
 p4est_dune_nonb_volume (p4est_dune_nonb_t *nonb, p4est_quad_nonb_t *nquad)
 {
-  int                 i, j, k;
+  int                 i, j, k, m;
   size_t              nvz;
   size_t              oz, lz;
   size_t              goz, glz;
@@ -879,6 +956,7 @@ p4est_dune_nonb_volume (p4est_dune_nonb_t *nonb, p4est_quad_nonb_t *nquad)
   p4est_quad_nonb_t  *nface[2];
   p4est_quadrant_t    children[P4EST_CHILDREN];
   p4est_quadrant_t   *tquad;
+  p4est_iter_face_side_t *fside;
 
   /* verify preconditions */
   P4EST_ASSERT (nonb != NULL);
@@ -971,11 +1049,23 @@ p4est_dune_nonb_volume (p4est_dune_nonb_t *nonb, p4est_quad_nonb_t *nquad)
 
   /* call face recursion for all faces inside this volume */
   if (nonb->iter_face != NULL) {
-    for (k = 0, i = 0; i < P4EST_DIM; ++i) {
-      for (j = 0; j < P4EST_HALF; ++j, ++k) {
-        nface[0] = nchildren[nonb_face_child[k][0]];
-        nface[1] = nchildren[nonb_face_child[k][1]];
-        p4est_dune_nonb_face (nonb, nface, nonb_face_number[i]);
+    for (m = 0, i = 0; i < P4EST_DIM; ++i) {
+
+      /* for a given dimension all faces face the same way */
+      for (k = 0; k < 2; ++k) {
+        fside = (p4est_iter_face_side_t *)
+          sc_array_index (&nonb->finfo.sides, k);
+        P4EST_ASSERT (nonb->vinfo.treeid == fside->treeid);
+        fside->face = nonb_face_number[i][k];
+        fside->is_hanging = 0;
+      }
+
+      /* go over all parallel faces in this direction */
+      for (j = 0; j < P4EST_HALF; ++j, ++m) {
+        for (k = 0; k < 2; ++k) {
+          nface[k] = nchildren[nonb_face_child[m][k]];
+        }
+        p4est_dune_nonb_face (nonb, nface, j);
       }
     }
   }
@@ -990,8 +1080,7 @@ p4est_dune_nonb_volume (p4est_dune_nonb_t *nonb, p4est_quad_nonb_t *nquad)
                    (long) nchild->skey.p.which_tree);
     p4est_quadrant_print (SC_LP_ERROR, &nchild->skey);
 
-    P4EST_EXECUTE_ASSERT_TRUE
-      (sc_hash_remove (nonb->qhash, nchild, &rfound));
+    P4EST_EXECUTE_ASSERT_TRUE (sc_hash_remove (nonb->qhash, nchild, &rfound));
     P4EST_ASSERT ((p4est_quad_nonb_t *) rfound == nchild);
     p4est_dune_nquad_free (nonb, nchild);
 #endif
@@ -1089,8 +1178,7 @@ p4est_dune_iterate_nonb (p4est_t * p4est, p4est_ghost_t * ghost_layer,
     P4EST_LDEBUGF ("Removing in tree %ld quadrant:\n",
                    (long) nquad->skey.p.which_tree);
     p4est_quadrant_print (SC_LP_ERROR, &nquad->skey);
-    P4EST_EXECUTE_ASSERT_TRUE
-      (sc_hash_remove (nonb->qhash, nquad, &rfound));
+    P4EST_EXECUTE_ASSERT_TRUE (sc_hash_remove (nonb->qhash, nquad, &rfound));
     P4EST_ASSERT ((p4est_quad_nonb_t *) rfound == nquad);
     p4est_dune_nquad_free (nonb, nquad);
 #endif
