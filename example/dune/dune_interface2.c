@@ -87,6 +87,8 @@ typedef struct p4est_dune_iter_context
 
   p4est_locidx_t      num_volumes;
   p4est_locidx_t      num_faces;
+  p4est_locidx_t      num_faces_full;
+  p4est_locidx_t      num_faces_boundary;
 }
 p4est_dune_iter_context_t;
 
@@ -111,11 +113,42 @@ static void
 p4est_dune_face_iter (p4est_iter_face_info_t *info, void *user_data)
 {
   p4est_dune_iter_context_t *c = (p4est_dune_iter_context_t *) user_data;
+  int                 k;
+  int                 full;
+  p4est_iter_face_side_t *fside;
 
   P4EST_ASSERT (info != NULL);
   P4EST_ASSERT (c != NULL);
 
   ++c->num_faces;
+
+  /* count specific cases of face connections */
+  if (info->sides.elem_count == 2) {
+    /* identify cases where no side is hanging */
+    full = 1;
+    for (k = 0; k < 2; ++k) {
+      fside = (p4est_iter_face_side_t *)
+        sc_array_index_int (&info->sides, k);
+      if (fside->is_hanging) {
+        full = 0;
+        break;
+      }
+    }
+    if (full) {
+      ++c->num_faces_full;
+    }
+  }
+  else {
+    /* this is a domain (necessarily tree) boundary */
+#ifdef P4EST_ENABLE_DEBUG
+    P4EST_ASSERT (info->sides.elem_count == 1);
+    P4EST_ASSERT (info->tree_boundary == P4EST_CONNECT_FACE);
+    fside = (p4est_iter_face_side_t *)
+      sc_array_index_int (&info->sides, 0);
+    P4EST_ASSERT (!fside->is_hanging);
+#endif
+    ++c->num_faces_boundary;
+  }
 }
 
 static void
@@ -131,6 +164,7 @@ run_dune_iterator (p4est_t *p4est, p4est_ghost_t *ghost)
   context->treeid = -1;
   context->tree = NULL;
   context->num_volumes = context->num_faces = 0;
+  context->num_faces_full = context->num_faces_boundary = 0;
   p4est_dune_iterate (p4est, ghost, context, p4est_dune_volume_iter, NULL);
   SC_CHECK_ABORT (context->num_volumes == p4est->local_num_quadrants,
                   "volume iteration count mismatch");
@@ -140,13 +174,16 @@ run_dune_iterator (p4est_t *p4est, p4est_ghost_t *ghost)
   context->treeid = -1;
   context->tree = NULL;
   context->num_volumes = context->num_faces = 0;
+  context->num_faces_full = context->num_faces_boundary = 0;
   p4est_dune_iterate (p4est, ghost, context,
                       p4est_dune_volume_iter, p4est_dune_face_iter);
   SC_CHECK_ABORT (context->num_volumes == p4est->local_num_quadrants,
                   "face iteration count mismatch");
 
   /* print simple diagnostic message */
-  P4EST_INFOF ("Iterated over %ld local faces\n", (long) context->num_faces);
+  P4EST_INFOF ("Iterated over %ld local faces full %ld boundary %ld\n",
+               (long) context->num_faces, (long) context->num_faces_full,
+               (long) context->num_faces_boundary);
 }
 
 static int
