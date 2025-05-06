@@ -110,6 +110,11 @@ p4est_dune_volume_iter (p4est_iter_volume_info_t *info, void *user_data)
 }
 
 static void
+p4est_dune_face_dummy (p4est_iter_face_info_t *info, void *user_data)
+{
+}
+
+static void
 p4est_dune_face_iter (p4est_iter_face_info_t *info, void *user_data)
 {
   p4est_dune_iter_context_t *c = (p4est_dune_iter_context_t *) user_data;
@@ -159,6 +164,9 @@ run_dune_iterator (p4est_t *p4est, p4est_ghost_t *ghost)
 
   /* empty iteration */
   p4est_dune_iterate (p4est, ghost, NULL, NULL, NULL);
+
+  /* just faces without ghost layer */
+  p4est_dune_iterate (p4est, NULL, NULL, NULL, p4est_dune_face_dummy);
 
   /* iterate over volumes only */
   context->treeid = -1;

@@ -653,7 +653,11 @@ typedef struct p4est_quad_nonb
   /* If skey is equal to a ghost, this is all zeroes. */
   size_t              gsplit[P4EST_CHILDREN + 1];
 
-  /* Number of visible strict descendants below skey. */
+  /* Number of visible strict descendants below skey.
+   * If this is 0, there is neither a local nor ghost contained.
+   * The special value -1 designates a full size local quadrant.
+   * The special value -2 designates a full size ghost quadrant.
+   */
   p4est_locidx_t      nvdesc;
 }
 p4est_quad_nonb_t;
@@ -756,6 +760,7 @@ p4est_dune_nonb_face (p4est_dune_nonb_t *nonb,
   /* for now, assume this is a face within a tree */
   P4EST_ASSERT (nonb != NULL);
   P4EST_ASSERT (nonb->finfo.orientation == 0);
+  P4EST_ASSERT (nonb->finfo.sides.elem_count == 2);
   P4EST_ASSERT (nonb->iter_face != NULL);
 
   /* if there are no local quadrants on either side, we bail */
@@ -763,8 +768,10 @@ p4est_dune_nonb_face (p4est_dune_nonb_t *nonb,
     return;
   }
 
-  /* if both sides are not refined, we evaluate the face directly */
-  if (nquads[0]->nvdesc == 0 && nquads[1]->nvdesc == 0) {
+  /* if both sides are full size, we evaluate the face directly */
+  if (nquads[0]->nvdesc <= 0 && nquads[1]->nvdesc <= 0) {
+    P4EST_ASSERT (nquads[0]->squads.elem_count == 1 ||
+                  nquads[1]->squads.elem_count == 1);
 
     /* both sides are treated the same way */
     for (k = 0; k < 2; ++k) {
@@ -775,6 +782,7 @@ p4est_dune_nonb_face (p4est_dune_nonb_t *nonb,
       nq = nquads[k];
       if (nq->squads.elem_count == 1) {
         P4EST_ASSERT (nq->ghosts.elem_count == 0);
+        P4EST_ASSERT (nq->nvdesc == -1);
 
         /* this side is local */
         fside->is.full.is_ghost = 0;
@@ -782,13 +790,25 @@ p4est_dune_nonb_face (p4est_dune_nonb_t *nonb,
         fside->is.full.quadid = nq->quadid;
       }
       else {
+        /* allow for ghost quadrants that should be there but aren't */
         P4EST_ASSERT (nq->squads.elem_count == 0);
-        P4EST_ASSERT (nq->ghosts.elem_count == 1);
+        P4EST_ASSERT (nq->ghosts.elem_count <= 1);
+        P4EST_ASSERT (nq->nvdesc != -1);
 
         /* this side is remote */
         fside->is.full.is_ghost = 1;
-        fside->is.full.quad = p4est_quadrant_array_index (&nq->ghosts, 0);
-        fside->is.full.quadid = nq->ghostid;
+        if (nq->ghosts.elem_count == 0) {
+          /* ghost not present when it should be by the mesh logic */
+          P4EST_ASSERT (nq->nvdesc == 0);
+          fside->is.full.quad = NULL;
+          fside->is.full.quadid = -1;
+        }
+        else {
+          /* proper ghost quadrant */
+          P4EST_ASSERT (nq->nvdesc == -2);
+          fside->is.full.quad = p4est_quadrant_array_index (&nq->ghosts, 0);
+          fside->is.full.quadid = nq->ghostid;
+        }
       }
     }
 
@@ -826,6 +846,8 @@ p4est_dune_nonb_volume (p4est_dune_nonb_t *nonb, p4est_quad_nonb_t *nquad)
 
     /* if there is one real quadrant at this level, stop the recursion */
     if (tquad->level == nquad->skey.level) {
+      /* mark full descendant as special case */
+      nquad->nvdesc = -1;
 
       /* this is the place to execute the volume callback */
       if (nonb->iter_volume != NULL) {
@@ -843,6 +865,8 @@ p4est_dune_nonb_volume (p4est_dune_nonb_t *nonb, p4est_quad_nonb_t *nquad)
 
     /* if there is one ghost quadrant at this level, stop the recursion */
     if (tquad->level == nquad->skey.level) {
+      /* mark full descendant as special case */
+      nquad->nvdesc = -2;
       return;
     }
   }
