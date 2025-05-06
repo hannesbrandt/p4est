@@ -135,8 +135,9 @@ p4est_dune_face_iter (p4est_iter_face_info_t *info, void *user_data)
       fside = (p4est_iter_face_side_t *)
         sc_array_index_int (&info->sides, k);
       if (fside->is_hanging) {
+        /* there can be no callback with two hanging faces */
+        P4EST_ASSERT (full);
         full = 0;
-        break;
       }
     }
     if (full) {
