@@ -585,7 +585,6 @@ p4est_dune_iterate_wrap (p4est_t * p4est, p4est_ghost_t * ghost_layer,
                          p4est_iter_face_t iter_face)
 {
   P4EST_ASSERT (p4est != NULL);
-  P4EST_ASSERT (ghost_layer != NULL);
 
   if (iter_face == NULL) {
     /* no need to do anything special: pass through */
@@ -768,18 +767,22 @@ p4est_dune_nonb_face (p4est_dune_nonb_t *nonb,
     return;
   }
 
-  /* if both sides are full size, we evaluate the face directly */
-  if (nquads[0]->nvdesc <= 0 && nquads[1]->nvdesc <= 0) {
-    P4EST_ASSERT (nquads[0]->squads.elem_count == 1 ||
-                  nquads[1]->squads.elem_count == 1);
+  /* we will definitely execute the face callback or go into the recursion */
+  for (k = 0; k < 2; ++k) {
+    fside = (p4est_iter_face_side_t *)
+      sc_array_index (&nonb->finfo.sides, k);
+    fside->face = faces[k];
+    nq = nquads[k];
 
-    /* both sides are treated the same way */
-    for (k = 0; k < 2; ++k) {
-      fside = (p4est_iter_face_side_t *)
-        sc_array_index (&nonb->finfo.sides, k);
-      fside->face = faces[k];
+    /* determine hanging status of this side */
+    if (nq->nvdesc <= 0) {
+      P4EST_ASSERT (nq->squads.elem_count <= 1);
+      P4EST_ASSERT (nq->ghosts.elem_count <= 1);
+
+      /* this side is either a full size quadrant or missing ghost(s) */
       fside->is_hanging = 0;
-      nq = nquads[k];
+
+      /* this face side will be the same for any small neighbor faces */
       if (nq->squads.elem_count == 1) {
         P4EST_ASSERT (nq->ghosts.elem_count == 0);
         P4EST_ASSERT (nq->nvdesc == -1);
@@ -804,21 +807,38 @@ p4est_dune_nonb_face (p4est_dune_nonb_t *nonb,
           fside->is.full.quadid = -1;
         }
         else {
-          /* proper ghost quadrant */
+          /* proper full size ghost quadrant */
           P4EST_ASSERT (nq->nvdesc == -2);
           fside->is.full.quad = p4est_quadrant_array_index (&nq->ghosts, 0);
           fside->is.full.quadid = nq->ghostid;
         }
       }
     }
+    else {
+      /* this is a hanging face side */
+      fside->is_hanging = 1;
+
+      /* prepare what's needed to loop over the children below */
+
+    }
+  }
+
+  /* if both sides are full size, we evaluate the face directly */
+  if (nquads[0]->nvdesc <= 0 && nquads[1]->nvdesc <= 0) {
+    P4EST_ASSERT (nquads[0]->squads.elem_count == 1 ||
+                  nquads[1]->squads.elem_count == 1);
 
     /* execute the face callback with two unsplit sides */
     nonb->iter_face (&nonb->finfo, nonb->user_data);
-    return;
   }
+  else {
+    /* go down the face recursion */
+    for (k = 0; k < P4EST_HALF; ++k) {
 
-  /* go down the face recursion */
 
+
+    }
+  }
 }
 
 /* called with fully initialized nquad context for this volume */
