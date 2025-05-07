@@ -634,13 +634,13 @@ p4est_dune_iterate_wrap (p4est_t * p4est, p4est_ghost_t * ghost_layer,
 
 typedef struct sc_dlink
 {
-  void                *data;
-  struct sc_dlink     *prev;
-  struct sc_dlink     *next;
+  void               *data;
+  struct sc_dlink    *prev;
+  struct sc_dlink    *next;
 }
 sc_dlink_t;
 
-typedef void (*sc_drop_function_t) (void *v, void *u);
+typedef void        (*sc_drop_function_t) (void *v, void *u);
 
 typedef struct sc_hash_mru
 {
@@ -678,7 +678,7 @@ static unsigned int
 sc_hash_mru_hash (const void *v, const void *u)
 {
   const sc_hash_mru_t *mru = (const sc_hash_mru_t *) u;
-  const sc_dlink_t *lynk = (const sc_dlink_t *) v;
+  const sc_dlink_t   *lynk = (const sc_dlink_t *) v;
 
   SC_ASSERT (mru != NULL);
   SC_ASSERT (mru->hash_fn != NULL);
@@ -690,8 +690,8 @@ static int
 sc_hash_mru_is_equal (const void *v1, const void *v2, const void *u)
 {
   const sc_hash_mru_t *mru = (const sc_hash_mru_t *) u;
-  const sc_dlink_t *lynk1 = (const sc_dlink_t *) v1;
-  const sc_dlink_t *lynk2 = (const sc_dlink_t *) v2;
+  const sc_dlink_t   *lynk1 = (const sc_dlink_t *) v1;
+  const sc_dlink_t   *lynk2 = (const sc_dlink_t *) v2;
 
   SC_ASSERT (mru != NULL);
   SC_ASSERT (mru->equal_fn != NULL);
@@ -736,11 +736,11 @@ sc_hash_mru_consolidate (sc_hash_mru_t *mru)
   }
 }
 
-sc_hash_mru_t *
+sc_hash_mru_t      *
 sc_hash_mru_new (sc_hash_function_t hash_fn, sc_equal_function_t equal_fn,
                  sc_drop_function_t drop_fn, void *user, size_t maxcount)
 {
-  sc_hash_mru_t *mru;
+  sc_hash_mru_t      *mru;
 
   SC_ASSERT (hash_fn != NULL);
   SC_ASSERT (equal_fn != NULL);
@@ -769,7 +769,7 @@ sc_hash_mru_destroy (sc_hash_mru_t *mru)
 
   /* call drop handler on remaining items */
   if (mru->drop_fn != NULL) {
-    sc_dlink_t          *head = mru->first;
+    sc_dlink_t         *head = mru->first;
 
     /* walk through the list from oldest to newest */
     while (head != NULL) {
@@ -793,10 +793,10 @@ sc_hash_mru_destroy (sc_hash_mru_t *mru)
 int
 sc_hash_mru_insert_unique (sc_hash_mru_t *mru, void *v, void ***found)
 {
-  int                inserted;
-  void             **lfound;
-  sc_dlink_t         key, *lkey = &key;
-  sc_dlink_t        *add;
+  int                 inserted;
+  void              **lfound;
+  sc_dlink_t          key, *lkey = &key;
+  sc_dlink_t         *add;
 
   /* verify preconditions */
   SC_ASSERT (mru != NULL);
@@ -867,10 +867,10 @@ sc_hash_mru_insert_unique (sc_hash_mru_t *mru, void *v, void ***found)
 int
 sc_hash_mru_remove (sc_hash_mru_t *mru, void *v, void **found)
 {
-  int                removed;
-  void              *lfound;
-  sc_dlink_t         key, *lkey = &key;
-  sc_dlink_t        *drop;
+  int                 removed;
+  void               *lfound;
+  sc_dlink_t          key, *lkey = &key;
+  sc_dlink_t         *drop;
 
   /* verify preconditions */
   SC_ASSERT (mru != NULL);
