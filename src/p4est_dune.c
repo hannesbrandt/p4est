@@ -628,6 +628,209 @@ p4est_dune_iterate_wrap (p4est_t * p4est, p4est_ghost_t * ghost_layer,
   }
 }
 
+/**********************************************************************\
+*                         Auxiliary hash cache                         *
+\**********************************************************************/
+
+typedef struct sc_dlink
+{
+  void                *data;
+  struct sc_dlink     *prev;
+  struct sc_dlink     *next;
+}
+sc_dlink_t;
+
+typedef void (*sc_drop_function_t) (void *v, void *u);
+
+typedef struct sc_hash_mru
+{
+  /* functions provided by the user */
+  sc_hash_function_t  hash_fn;
+  sc_equal_function_t equal_fn;
+  sc_drop_function_t  drop_fn;
+  void               *user;
+
+  /* internal container objects */
+  sc_hash_t          *hash;
+  sc_mempool_t       *pool;
+  sc_dlink_t         *first, *last;
+
+  /* counters and statistics */
+  size_t              maxcount;
+  size_t              count;
+}
+sc_hash_mru_t;
+
+sc_hash_mru_t      *sc_hash_mru_new (sc_hash_function_t hash_fn,
+                                     sc_equal_function_t equal_fn,
+                                     sc_drop_function_t drop_fn,
+                                     void *user, size_t maxcount);
+void                sc_hash_mru_destroy (sc_hash_mru_t *mru);
+
+int                 sc_hash_mru_insert_unique (sc_hash_mru_t *mru,
+                                               void *v, void ***found);
+void                sc_hash_mru_remove (sc_hash_mru_t *mru,
+                                        void *v, void **found);
+
+#ifndef P4_TO_P8
+
+static unsigned int
+sc_hash_mru_hash (const void *v, const void *u)
+{
+  const sc_hash_mru_t *mru = (const sc_hash_mru_t *) u;
+  const sc_dlink_t *lynk = (const sc_dlink_t *) v;
+
+  P4EST_ASSERT (mru != NULL);
+  P4EST_ASSERT (mru->hash_fn != NULL);
+
+  return mru->hash_fn (lynk->data, mru->user);
+}
+
+static int
+sc_hash_mru_is_equal (const void *v1, const void *v2, const void *u)
+{
+  const sc_hash_mru_t *mru = (const sc_hash_mru_t *) u;
+  const sc_dlink_t *lynk1 = (const sc_dlink_t *) v1;
+  const sc_dlink_t *lynk2 = (const sc_dlink_t *) v2;
+
+  P4EST_ASSERT (mru != NULL);
+  P4EST_ASSERT (mru->equal_fn != NULL);
+
+  return mru->equal_fn (lynk1->data, lynk2->data, mru->user);
+}
+
+sc_hash_mru_t *
+sc_hash_mru_new (sc_hash_function_t hash_fn, sc_equal_function_t equal_fn,
+                 sc_drop_function_t drop_fn, void *user, size_t maxcount)
+{
+  sc_hash_mru_t *mru;
+
+  SC_ASSERT (hash_fn != NULL);
+  SC_ASSERT (equal_fn != NULL);
+
+  mru = SC_ALLOC_ZERO (sc_hash_mru_t, 1);
+  mru->hash_fn = hash_fn;
+  mru->equal_fn = equal_fn;
+  mru->drop_fn = drop_fn;
+  mru->user = user;
+
+  mru->hash = sc_hash_new (sc_hash_mru_hash, sc_hash_mru_is_equal, mru, NULL);
+  mru->pool = sc_mempool_new (sizeof (sc_dlink_t));
+
+  mru->maxcount = maxcount;
+
+  return mru;
+}
+
+void
+sc_hash_mru_destroy (sc_hash_mru_t *mru)
+{
+  /* free all stored list elements */
+  sc_hash_destroy (mru->hash);
+
+  /* free the hash structure itself */
+  sc_mempool_destroy (mru->pool);
+
+  /* free this object */
+  SC_FREE (mru);
+}
+
+int
+sc_hash_mru_insert_unique (sc_hash_mru_t *mru, void *v, void ***found)
+{
+  int                inserted;
+  void             **lfound;
+  sc_dlink_t         key, *lkey = &key;
+  sc_dlink_t        *add, *drop;
+
+  lkey->data = v;
+  inserted = sc_hash_insert_unique (mru->hash, lkey, &lfound);
+  if (inserted) {
+
+    /* this object is newly added */
+    add = (sc_dlink_t *) sc_mempool_alloc (mru->pool);
+    add->data = v;
+    add->next = NULL;
+    if (mru->last == NULL) {
+
+      /* the list was empty before */
+      P4EST_ASSERT (mru->first == NULL && mru->count == 0);
+      (mru->first = add)->prev = NULL;
+    }
+    else {
+
+      /* append to the list */
+      P4EST_ASSERT (mru->last->next == NULL && mru->count > 0);
+      (mru->last->next = add)->prev = mru->last;
+    }
+    *(sc_dlink_t **) lfound = mru->last = add;
+    ++mru->count;
+  }
+  else {
+
+    /* this object exists already */
+    add = *(sc_dlink_t **) lfound;
+    if (add != mru->last) {
+
+      /* remove it from its place */
+      P4EST_ASSERT (add->next != NULL);
+      if ((add->next->prev = add->prev) == NULL) {
+
+        /* we are removing the first element */
+        P4EST_ASSERT (add == mru->first);
+        mru->first = add->next;
+      }
+      else {
+
+        /* we keep the first element */
+        add->prev->next = add->next;
+      }
+
+      /* and append it to the end */
+      (add->prev = mru->last)->next = add;
+      (mru->last = add)->next = NULL;
+    }
+  }
+
+  /* drop superfluous objects */
+  while (mru->count > mru->maxcount) {
+    drop = mru->first;
+    P4EST_ASSERT (drop != NULL);
+    P4EST_ASSERT (drop->prev == NULL);
+
+    /* call the user's drop handler */
+    if (mru->drop_fn != NULL) {
+      mru->drop_fn (drop->data, mru->user);
+    }
+
+    /* drop oldest list entry */
+    if ((mru->first = drop->next) == NULL) {
+      P4EST_ASSERT (mru->count == 1);
+      mru->last = NULL;
+    }
+    else {
+      P4EST_ASSERT (drop->next->prev == drop);
+      mru->first->prev = NULL;
+    }
+    sc_mempool_free (mru->pool, drop);
+    --mru->count;
+  }
+
+  /* indicate pre-existing object or not */
+  return inserted;
+}
+
+void
+sc_hash_mru_remove (sc_hash_mru_t *mru, void *v, void **found)
+{
+}
+
+#endif
+
+/**********************************************************************\
+*                       Non-balanced face iterator                     *
+\**********************************************************************/
+
 /** The complete quadrant context for the recursion. */
 typedef struct p4est_quad_nonb
 {
@@ -695,6 +898,9 @@ typedef struct p4est_dune_nonb
   /* containers and data */
   sc_hash_t          *qhash;
   sc_mempool_t       *qpool;
+
+  /* newly developed hash cache */
+  sc_hash_mru_t      *mru[P4EST_MAXLEVEL];
 
   /* state of recursion */
   p4est_tree_t       *tree;
@@ -1118,6 +1324,13 @@ p4est_dune_iterate_nonb (p4est_t * p4est, p4est_ghost_t * ghost_layer,
                              p4est_quad_nonb_is_equal, nonb, NULL);
   nonb->qpool = sc_mempool_new (sizeof (p4est_quad_nonb_t));
 
+  /* newly written hash cache */
+  for (k = 0; k < P4EST_MAXLEVEL; ++k) {
+    nonb->mru[k] = sc_hash_mru_new (p4est_quad_nonb_hash,
+                                    p4est_quad_nonb_is_equal,
+                                    NULL, NULL, 1 << 15);
+  }
+
   /* prepare reusable volume context */
   nonb->vinfo.p4est = p4est;
   nonb->vinfo.ghost_layer = ghost_layer;
@@ -1187,6 +1400,11 @@ p4est_dune_iterate_nonb (p4est_t * p4est, p4est_ghost_t * ghost_layer,
   /* go into face recursion involving neighbor trees or boundary */
   if (nonb->iter_face != NULL) {
 
+  }
+
+  /* destroy hash cache */
+  for (k = 0; k < P4EST_MAXLEVEL; ++k) {
+    sc_hash_mru_destroy (nonb->mru[k]);
   }
 
   /* free context data */
