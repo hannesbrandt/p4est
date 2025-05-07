@@ -669,7 +669,7 @@ void                sc_hash_mru_destroy (sc_hash_mru_t *mru);
 
 int                 sc_hash_mru_insert_unique (sc_hash_mru_t *mru,
                                                void *v, void ***found);
-void                sc_hash_mru_remove (sc_hash_mru_t *mru,
+int                 sc_hash_mru_remove (sc_hash_mru_t *mru,
                                         void *v, void **found);
 
 #ifndef P4_TO_P8
@@ -680,8 +680,8 @@ sc_hash_mru_hash (const void *v, const void *u)
   const sc_hash_mru_t *mru = (const sc_hash_mru_t *) u;
   const sc_dlink_t *lynk = (const sc_dlink_t *) v;
 
-  P4EST_ASSERT (mru != NULL);
-  P4EST_ASSERT (mru->hash_fn != NULL);
+  SC_ASSERT (mru != NULL);
+  SC_ASSERT (mru->hash_fn != NULL);
 
   return mru->hash_fn (lynk->data, mru->user);
 }
@@ -693,10 +693,47 @@ sc_hash_mru_is_equal (const void *v1, const void *v2, const void *u)
   const sc_dlink_t *lynk1 = (const sc_dlink_t *) v1;
   const sc_dlink_t *lynk2 = (const sc_dlink_t *) v2;
 
-  P4EST_ASSERT (mru != NULL);
-  P4EST_ASSERT (mru->equal_fn != NULL);
+  SC_ASSERT (mru != NULL);
+  SC_ASSERT (mru->equal_fn != NULL);
 
   return mru->equal_fn (lynk1->data, lynk2->data, mru->user);
+}
+
+static void
+sc_hash_mru_consolidate (sc_hash_mru_t *mru)
+{
+  sc_dlink_t         *drop;
+
+  /* verify preconditions */
+  SC_ASSERT (mru != NULL);
+  SC_ASSERT (mru->pool->elem_count == mru->count);
+  SC_ASSERT (mru->hash->elem_count == mru->count);
+
+  /* drop superfluous objects */
+  while (mru->count > mru->maxcount) {
+    drop = mru->first;
+    SC_ASSERT (drop != NULL);
+    SC_ASSERT (drop->prev == NULL);
+
+    /* call the user's drop handler */
+    if (mru->drop_fn != NULL) {
+      mru->drop_fn (drop->data, mru->user);
+    }
+
+    /* drop oldest list entry */
+    if ((mru->first = drop->next) == NULL) {
+      SC_ASSERT (mru->count == 1);
+      mru->last = NULL;
+    }
+    else {
+      SC_ASSERT (drop->next->prev == drop);
+      mru->first->prev = NULL;
+    }
+
+    /* update memory and count */
+    sc_mempool_free (mru->pool, drop);
+    --mru->count;
+  }
 }
 
 sc_hash_mru_t *
@@ -725,6 +762,24 @@ sc_hash_mru_new (sc_hash_function_t hash_fn, sc_equal_function_t equal_fn,
 void
 sc_hash_mru_destroy (sc_hash_mru_t *mru)
 {
+  /* verify preconditions */
+  SC_ASSERT (mru != NULL);
+  SC_ASSERT (mru->pool->elem_count == mru->count);
+  SC_ASSERT (mru->hash->elem_count == mru->count);
+
+  /* call drop handler on remaining items */
+  if (mru->drop_fn != NULL) {
+    sc_dlink_t          *head = mru->first;
+
+    /* walk through the list from oldest to newest */
+    while (head != NULL) {
+      mru->drop_fn (head->data, mru->user);
+      head = head->next;
+
+      /* returning to mempool would be redundant here */
+    }
+  }
+
   /* free all stored list elements */
   sc_hash_destroy (mru->hash);
 
@@ -741,8 +796,14 @@ sc_hash_mru_insert_unique (sc_hash_mru_t *mru, void *v, void ***found)
   int                inserted;
   void             **lfound;
   sc_dlink_t         key, *lkey = &key;
-  sc_dlink_t        *add, *drop;
+  sc_dlink_t        *add;
 
+  /* verify preconditions */
+  SC_ASSERT (mru != NULL);
+  SC_ASSERT (mru->pool->elem_count == mru->count);
+  SC_ASSERT (mru->hash->elem_count == mru->count);
+
+  /* construct hash key */
   lkey->data = v;
   inserted = sc_hash_insert_unique (mru->hash, lkey, &lfound);
   if (inserted) {
@@ -754,13 +815,13 @@ sc_hash_mru_insert_unique (sc_hash_mru_t *mru, void *v, void ***found)
     if (mru->last == NULL) {
 
       /* the list was empty before */
-      P4EST_ASSERT (mru->first == NULL && mru->count == 0);
+      SC_ASSERT (mru->first == NULL && mru->count == 0);
       (mru->first = add)->prev = NULL;
     }
     else {
 
       /* append to the list */
-      P4EST_ASSERT (mru->last->next == NULL && mru->count > 0);
+      SC_ASSERT (mru->last->next == NULL && mru->count > 0);
       (mru->last->next = add)->prev = mru->last;
     }
     *(sc_dlink_t **) lfound = mru->last = add;
@@ -773,11 +834,11 @@ sc_hash_mru_insert_unique (sc_hash_mru_t *mru, void *v, void ***found)
     if (add != mru->last) {
 
       /* remove it from its place */
-      P4EST_ASSERT (add->next != NULL);
+      SC_ASSERT (add->next != NULL);
       if ((add->next->prev = add->prev) == NULL) {
 
         /* we are removing the first element */
-        P4EST_ASSERT (add == mru->first);
+        SC_ASSERT (add == mru->first);
         mru->first = add->next;
       }
       else {
@@ -792,37 +853,66 @@ sc_hash_mru_insert_unique (sc_hash_mru_t *mru, void *v, void ***found)
     }
   }
 
-  /* drop superfluous objects */
-  while (mru->count > mru->maxcount) {
-    drop = mru->first;
-    P4EST_ASSERT (drop != NULL);
-    P4EST_ASSERT (drop->prev == NULL);
+  /* return data location if so desired */
+  if (found != NULL) {
+    *found = &add->data;
+  }
 
-    /* call the user's drop handler */
-    if (mru->drop_fn != NULL) {
-      mru->drop_fn (drop->data, mru->user);
+  /* indicate pre-existing object and return */
+  sc_hash_mru_consolidate (mru);
+  return inserted;
+}
+
+/* not calling drop on the item found! */
+int
+sc_hash_mru_remove (sc_hash_mru_t *mru, void *v, void **found)
+{
+  int                removed;
+  void              *lfound;
+  sc_dlink_t         key, *lkey = &key;
+  sc_dlink_t        *drop;
+
+  /* verify preconditions */
+  SC_ASSERT (mru != NULL);
+  SC_ASSERT (mru->pool->elem_count == mru->count);
+  SC_ASSERT (mru->hash->elem_count == mru->count);
+
+  /* construct hash key */
+  lkey->data = v;
+  removed = sc_hash_remove (mru->hash, lkey, &lfound);
+  if (removed) {
+    SC_ASSERT (mru->count > 0);
+
+    /* return data location if so desired */
+    drop = (sc_dlink_t *) lfound;
+    if (found != NULL) {
+      *found = drop->data;
     }
 
-    /* drop oldest list entry */
-    if ((mru->first = drop->next) == NULL) {
-      P4EST_ASSERT (mru->count == 1);
-      mru->last = NULL;
+    /* unlink found object from list */
+    if (drop->prev == NULL) {
+      SC_ASSERT (drop == mru->first);
+      mru->first = drop->next;
     }
     else {
-      P4EST_ASSERT (drop->next->prev == drop);
-      mru->first->prev = NULL;
+      drop->prev->next = drop->next;
     }
+    if (drop->next == NULL) {
+      SC_ASSERT (drop == mru->last);
+      mru->last = drop->prev;
+    }
+    else {
+      drop->next->prev = drop->prev;
+    }
+
+    /* update memory and count */
     sc_mempool_free (mru->pool, drop);
     --mru->count;
   }
 
-  /* indicate pre-existing object or not */
-  return inserted;
-}
-
-void
-sc_hash_mru_remove (sc_hash_mru_t *mru, void *v, void **found)
-{
+  /* indicate pre-existing object and return */
+  sc_hash_mru_consolidate (mru);
+  return removed;
 }
 
 #endif
