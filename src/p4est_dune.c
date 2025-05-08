@@ -658,6 +658,10 @@ typedef struct sc_hash_mru
   /* counters and statistics */
   size_t              maxcount;
   size_t              count;
+  size_t              num_inserted;
+  size_t              insert_missed;
+  size_t              num_removed;
+  size_t              remove_missed;
 }
 sc_hash_mru_t;
 
@@ -824,8 +828,11 @@ sc_hash_mru_insert_unique (sc_hash_mru_t *mru, void *v, void ***found)
       SC_ASSERT (mru->last->next == NULL && mru->count > 0);
       (mru->last->next = add)->prev = mru->last;
     }
+
+    /* update memory and counters */
     *(sc_dlink_t **) lfound = mru->last = add;
     ++mru->count;
+    ++mru->insert_missed;
   }
   else {
 
@@ -852,6 +859,7 @@ sc_hash_mru_insert_unique (sc_hash_mru_t *mru, void *v, void ***found)
       (mru->last = add)->next = NULL;
     }
   }
+  ++mru->num_inserted;
 
   /* return data location if so desired */
   if (found != NULL) {
@@ -909,6 +917,12 @@ sc_hash_mru_remove (sc_hash_mru_t *mru, void *v, void **found)
     sc_mempool_free (mru->pool, drop);
     --mru->count;
   }
+  else {
+
+    /* count as cache miss */
+    ++mru->remove_missed;
+  }
+  ++mru->num_removed;
 
   /* indicate pre-existing object and return */
   sc_hash_mru_consolidate (mru);
@@ -1006,7 +1020,6 @@ p4est_dune_nquad_alloc (p4est_dune_nonb_t *nonb)
   return (p4est_quad_nonb_t *) sc_mempool_alloc (nonb->qpool);
 }
 
-#if 0
 static void
 p4est_dune_nquad_free (p4est_dune_nonb_t *nonb, p4est_quad_nonb_t *nquad)
 {
@@ -1014,7 +1027,18 @@ p4est_dune_nquad_free (p4est_dune_nonb_t *nonb, p4est_quad_nonb_t *nquad)
   P4EST_ASSERT (nquad != NULL);
   sc_mempool_free (nonb->qpool, nquad);
 }
-#endif
+
+static void
+p4est_quad_nonb_drop (void *v, void *u)
+{
+  p4est_quad_nonb_t *n = (p4est_quad_nonb_t *) v;
+  p4est_dune_nonb_t *nonb = (p4est_dune_nonb_t *) u;
+
+  P4EST_ASSERT (n != NULL);
+  P4EST_ASSERT (nonb != NULL);
+
+  p4est_dune_nquad_free (nonb, n);
+}
 
 #ifndef P4_TO_P8
 static const int    nonb_face_child[4][2] = {
@@ -1418,7 +1442,7 @@ p4est_dune_iterate_nonb (p4est_t * p4est, p4est_ghost_t * ghost_layer,
   for (k = 0; k < P4EST_MAXLEVEL; ++k) {
     nonb->mru[k] = sc_hash_mru_new (p4est_quad_nonb_hash,
                                     p4est_quad_nonb_is_equal,
-                                    NULL, NULL, 1 << 15);
+                                    p4est_quad_nonb_drop, nonb, 1 << 14);
   }
 
   /* prepare reusable volume context */
