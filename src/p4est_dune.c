@@ -1031,8 +1031,8 @@ p4est_dune_nquad_free (p4est_dune_nonb_t *nonb, p4est_quad_nonb_t *nquad)
 static void
 p4est_quad_nonb_drop (void *v, void *u)
 {
-  p4est_quad_nonb_t *n = (p4est_quad_nonb_t *) v;
-  p4est_dune_nonb_t *nonb = (p4est_dune_nonb_t *) u;
+  p4est_quad_nonb_t  *n = (p4est_quad_nonb_t *) v;
+  p4est_dune_nonb_t  *nonb = (p4est_dune_nonb_t *) u;
 
   P4EST_ASSERT (n != NULL);
   P4EST_ASSERT (nonb != NULL);
@@ -1070,8 +1070,7 @@ static const int    nonb_face_number[3][2] = {
 };
 
 static void
-p4est_dune_nonb_full (p4est_quad_nonb_t *nq,
-                      p4est_iter_face_side_t *fside)
+p4est_dune_nonb_full (p4est_quad_nonb_t *nq, p4est_iter_face_side_t *fside)
 {
   P4EST_ASSERT (nq != NULL);
   P4EST_ASSERT (fside != NULL);
@@ -1174,8 +1173,7 @@ p4est_quad_nonb_split (p4est_dune_nonb_t *nonb, p4est_quad_nonb_t *nquad)
   P4EST_ASSERT (p4est_quadrant_is_valid (&nquad->skey));
 
   /* this quadrant may be empty entirely */
-  if ((lz = nquad->squads.elem_count) + 
-      (glz = nquad->ghosts.elem_count) == 0) {
+  if ((lz = nquad->squads.elem_count) + (glz = nquad->ghosts.elem_count) == 0) {
     return;
   }
 
@@ -1276,8 +1274,7 @@ p4est_quad_nonb_root (p4est_dune_nonb_t *nonb)
   if (nonb->ghost_layer != NULL) {
     goz = nroot->ghostid = nonb->ghost_layer->tree_offsets[tt];
     glz = nonb->ghost_layer->tree_offsets[tt + 1] - goz;
-    sc_array_init_view (&nroot->ghosts,
-                        &nonb->ghost_layer->ghosts, goz, glz);
+    sc_array_init_view (&nroot->ghosts, &nonb->ghost_layer->ghosts, goz, glz);
   }
 
   /* create rest of quadrant information */
@@ -1288,10 +1285,13 @@ p4est_quad_nonb_root (p4est_dune_nonb_t *nonb)
 static void
 p4est_quad_nonb_insert (p4est_dune_nonb_t *nonb, p4est_quad_nonb_t *nquad)
 {
+  /* verify preconditions */
   P4EST_ASSERT (nonb != NULL);
   P4EST_ASSERT (nonb->mru != NULL);
   P4EST_ASSERT (nquad != NULL);
   P4EST_ASSERT (p4est_quadrant_is_valid (&nquad->skey));
+
+  /* knowing that this quadrant is non yet cached */
   P4EST_EXECUTE_ASSERT_TRUE
     (sc_hash_mru_insert_unique (nonb->mru[nquad->skey.level],
                                 nquad, NULL));
@@ -1318,8 +1318,7 @@ p4est_dune_nonb_face (p4est_dune_nonb_t *nonb,
   P4EST_ASSERT (nquads[0] != NULL && nquads[1] != NULL);
 
   /* if there are no local quadrants on either side, we bail */
-  if (nquads[0]->squads.elem_count == 0 &&
-      nquads[1]->squads.elem_count == 0) {
+  if (nquads[0]->squads.elem_count == 0 && nquads[1]->squads.elem_count == 0) {
     return;
   }
 
@@ -1376,8 +1375,7 @@ p4est_dune_nonb_face (p4est_dune_nonb_t *nonb,
         P4EST_EXECUTE_ASSERT_TRUE
           (sc_hash_lookup (nonb->qhash, &nkey, &lfound));
 #endif
-        if (sc_hash_mru_remove (nonb->mru[nkey.skey.level],
-                                &nkey, &rfound)) {
+        if (sc_hash_mru_remove (nonb->mru[nkey.skey.level], &nkey, &rfound)) {
 
           /* this quadrant had been present */
           fchildren[k][j] = (p4est_quad_nonb_t *) rfound;
@@ -1397,8 +1395,7 @@ p4est_dune_nonb_face (p4est_dune_nonb_t *nonb,
   if (nquads[0]->nvdesc <= 0 && nquads[1]->nvdesc <= 0) {
     P4EST_ASSERT (nquads[0]->squads.elem_count == 1 ||
                   nquads[1]->squads.elem_count == 1);
-    P4EST_ASSERT (fchildren[0][0] == NULL &&
-                  fchildren[1][0] == NULL);
+    P4EST_ASSERT (fchildren[0][0] == NULL && fchildren[1][0] == NULL);
 
     /* execute the face callback with two unsplit sides */
     nonb->iter_face (&nonb->finfo, nonb->user_data);
@@ -1527,7 +1524,8 @@ p4est_dune_nonb_volume (p4est_dune_nonb_t *nonb, p4est_quad_nonb_t *nquad)
                      (long) nchild->skey.p.which_tree);
       p4est_quadrant_print (SC_LP_ERROR, &nchild->skey);
 
-      P4EST_EXECUTE_ASSERT_TRUE (sc_hash_remove (nonb->qhash, nchild, &rfound));
+      P4EST_EXECUTE_ASSERT_TRUE
+        (sc_hash_remove (nonb->qhash, nchild, &rfound));
       P4EST_ASSERT ((p4est_quad_nonb_t *) rfound == nchild);
       p4est_dune_nquad_free (nonb, nchild);
 #endif
@@ -1541,7 +1539,8 @@ p4est_dune_iterate_nonb (p4est_t * p4est, p4est_ghost_t * ghost_layer,
                          p4est_iter_face_t iter_face)
 {
   int                 k;
-  p4est_topidx_t      tt;
+  int                 tf, face, nface;
+  p4est_topidx_t      tt, nt;
   p4est_iter_face_side_t *fside;
   p4est_dune_nonb_t   snonb, *nonb = &snonb;
   p4est_quad_nonb_t  *nquad;
@@ -1608,17 +1607,46 @@ p4est_dune_iterate_nonb (p4est_t * p4est, p4est_ghost_t * ghost_layer,
     P4EST_LDEBUGF ("Removing in tree %ld quadrant:\n",
                    (long) nquad->skey.p.which_tree);
     p4est_quadrant_print (SC_LP_ERROR, &nquad->skey);
-    P4EST_EXECUTE_ASSERT_TRUE (sc_hash_remove (nonb->qhash, nquad, &rfound));
+    P4EST_EXECUTE_ASSERT_TRUE
+      (sc_hash_remove (nonb->qhash, nquad, &rfound));
     P4EST_ASSERT ((p4est_quad_nonb_t *) rfound == nquad);
     p4est_dune_nquad_free (nonb, nquad);
 #endif
 
     /* go into face recursion involving neighbor trees or boundary */
     if (nonb->iter_face != NULL) {
+      p4est_connectivity_t *conn = nonb->p4est->connectivity;
+      int                 orient;
 
-      /* loop through all lesser neighbors and begin face recursion */
-      /* this includes this same tree through a periodic boundary */
-      /* look each lesser neighbor's root up in the cache */
+      /* loop through all lesser tree neighbors for face recursion */
+      for (face = 0; face < P4EST_FACES; ++face) {
+        nt = conn->tree_to_tree[P4EST_FACES * tt + face];
+        tf = conn->tree_to_face[P4EST_FACES * tt + face];
+        orient = tf / P4EST_FACES;
+        nface = tf % P4EST_FACES;
+        if (nt < tt) {
+          /* a tree that whose volume we have visited previously */
+
+          /* look each lesser neighbor's root up in the cache */
+
+        }
+        else if (nt == tt) {
+          if (nface < face) {
+            /* this includes the same tree through a periodic boundary */
+
+            /* this tree has the same root */
+
+          }
+          else if (nface == face) {
+            P4EST_ASSERT (orient == 0);
+
+            /* this face is at a physical domain boundary */
+
+            /* we have no neighbor on the other side */
+
+          }
+        }
+      }
 
       /* cache tree root for reuse when we become a lesser neighbor */
       p4est_quad_nonb_insert (nonb, nquad);
@@ -1627,7 +1655,7 @@ p4est_dune_iterate_nonb (p4est_t * p4est, p4est_ghost_t * ghost_layer,
 
   /* destroy hash cache */
   for (k = 0; k < P4EST_MAXLEVEL; ++k) {
-    sc_hash_mru_t *mru = nonb->mru[k];
+    sc_hash_mru_t      *mru = nonb->mru[k];
 
     if (mru->num_inserted > 0 && mru->num_removed > 0) {
       P4EST_LDEBUGF ("Level %d miss ratio insert %.3f remove %.3f\n", k,
