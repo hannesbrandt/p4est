@@ -1010,6 +1010,7 @@ typedef struct p4est_dune_nonb
   p4est_tree_t       *tree;
   p4est_iter_volume_info_t vinfo;
   p4est_iter_face_info_t finfo;
+  p4est_iter_face_info_t fbinfo;
 }
 p4est_dune_nonb_t;
 
@@ -1293,8 +1294,43 @@ p4est_quad_nonb_insert (p4est_dune_nonb_t *nonb, p4est_quad_nonb_t *nquad)
 
   /* knowing that this quadrant is non yet cached */
   P4EST_EXECUTE_ASSERT_TRUE
-    (sc_hash_mru_insert_unique (nonb->mru[nquad->skey.level],
-                                nquad, NULL));
+    (sc_hash_mru_insert_unique (nonb->mru[nquad->skey.level], nquad, NULL));
+}
+
+static p4est_quad_nonb_t *
+p4est_quad_nonb_remove (p4est_dune_nonb_t *nonb, p4est_quad_nonb_t *nquad,
+                        int face, int j)
+{
+  int                 i;
+  void               *rfound;
+  p4est_quad_nonb_t   nkey, *nchild;
+
+  P4EST_ASSERT (nonb != NULL);
+  P4EST_ASSERT (nquad != NULL);
+  P4EST_ASSERT (0 <= face && face < P4EST_FACES);
+  P4EST_ASSERT (0 <= j && j < P4EST_HALF);
+
+  /* access the child quadrants touching the face */
+  i = p4est_face_corners[face][j];
+  p4est_quadrant_child (&nquad->skey, &nkey.skey, i);
+  nkey.skey.p.which_tree = nquad->skey.p.which_tree;
+
+  /* lookup quadrant in cache */
+  if (sc_hash_mru_remove (nonb->mru[nkey.skey.level], &nkey, &rfound)) {
+
+    /* this quadrant had been present */
+    nchild = (p4est_quad_nonb_t *) rfound;
+    P4EST_ASSERT (p4est_quadrant_child_id (&nchild->skey) == i);
+    P4EST_ASSERT (nchild->skey.level == nkey.skey.level);
+  }
+  else {
+
+    /* recreate quadrant object for recursion */
+    nchild = p4est_quad_nonb_child (nonb, nquad, i);
+  }
+
+  /* return qualified child object */
+  return nchild;
 }
 
 /* called with fully initialized nquad contexts for this interface */
@@ -1302,12 +1338,11 @@ static void
 p4est_dune_nonb_face (p4est_dune_nonb_t *nonb,
                       p4est_quad_nonb_t *nquads[2], int ih)
 {
-  int                 i, j, k;
+  int                 j, k;
   int                 level[2];
-  void               *rfound;
   p4est_iter_face_side_t *fside;
   p4est_quad_nonb_t  *nq, *fchildren[2][P4EST_HALF];
-  p4est_quad_nonb_t  *cquads[2], nkey;
+  p4est_quad_nonb_t  *cquads[2];
 
   /* for now, assume this is a face within a tree */
   P4EST_ASSERT (nonb != NULL);
@@ -1328,7 +1363,6 @@ p4est_dune_nonb_face (p4est_dune_nonb_t *nonb,
   }
 
   /* we will definitely execute the face callback or go into the recursion */
-  memset (&nkey, 0, sizeof (nkey));
   for (k = 0; k < 2; ++k) {
     fchildren[k][0] = NULL;
     nq = nquads[k];
@@ -1361,32 +1395,9 @@ p4est_dune_nonb_face (p4est_dune_nonb_t *nonb,
     }
     else {
 
-      /* prepare what's needed to loop over the children below */
+      /* gather what's needed to loop over the children below */
       for (j = 0; j < P4EST_HALF; ++j) {
-
-        /* access the child quadrants touching the face */
-        i = p4est_face_corners[fside->face][j];
-        p4est_quadrant_child (&nq->skey, &nkey.skey, i);
-        nkey.skey.p.which_tree = nq->skey.p.which_tree;
-#if 0
-        P4EST_LDEBUGF ("Looking up in tree %ld quadrant:\n",
-                       (long) nkey.skey.p.which_tree);
-        p4est_quadrant_print (SC_LP_ERROR, &nkey.skey);
-        P4EST_EXECUTE_ASSERT_TRUE
-          (sc_hash_lookup (nonb->qhash, &nkey, &lfound));
-#endif
-        if (sc_hash_mru_remove (nonb->mru[nkey.skey.level], &nkey, &rfound)) {
-
-          /* this quadrant had been present */
-          fchildren[k][j] = (p4est_quad_nonb_t *) rfound;
-          P4EST_ASSERT
-            (p4est_quadrant_child_id (&fchildren[k][j]->skey) == i);
-        }
-        else {
-
-          /* recreate recursion quadrant object */
-          fchildren[k][j] = p4est_quad_nonb_child (nonb, nq, i);
-        }
+        fchildren[k][j] = p4est_quad_nonb_remove (nonb, nq, fside->face, j);
       }
     }
   }
@@ -1416,6 +1427,56 @@ p4est_dune_nonb_face (p4est_dune_nonb_t *nonb,
           p4est_quad_nonb_insert (nonb, fchildren[k][j]);
         }
       }
+    }
+  }
+}
+
+/* called with fully initialized nquad contexts for this interface */
+static void
+p4est_dune_nonb_bface (p4est_dune_nonb_t *nonb, p4est_quad_nonb_t *nquad)
+{
+  int                 j;
+  p4est_iter_face_side_t *fside;
+  p4est_quad_nonb_t  *fchildren[P4EST_HALF];
+
+  /* for now, assume this is a face within a tree */
+  P4EST_ASSERT (nonb != NULL);
+  P4EST_ASSERT (nonb->fbinfo.orientation == 0);
+  P4EST_ASSERT (nonb->fbinfo.sides.elem_count == 1);
+  P4EST_ASSERT (nonb->iter_face != NULL);
+  P4EST_ASSERT (nquad != NULL);
+
+  /* if there are no local quadrants, we bail */
+  if (nquad->nvdesc == 0 || nquad->nvdesc == -2) {
+    return;
+  }
+
+  /* the face has only one side */
+  fside = (p4est_iter_face_side_t *)
+    sc_array_index (&nonb->fbinfo.sides, 0);
+
+  /* callback on a full size local quadrant */
+  if (nquad->nvdesc == -1) {
+    P4EST_ASSERT (nquad->squads.elem_count == 1);
+    P4EST_ASSERT (nquad->ghosts.elem_count == 0);
+
+    /* otherwise we must set new contents to the face side */
+    p4est_dune_nonb_full (nquad, fside);
+    nonb->iter_face (&nonb->fbinfo, nonb->user_data);
+  }
+  else {
+    P4EST_ASSERT (nquad->nvdesc > 0);
+    P4EST_ASSERT (nquad->squads.elem_count >= 1);
+
+    /* loop and recurse over the children */
+    for (j = 0; j < P4EST_HALF; ++j) {
+      fchildren[j] = p4est_quad_nonb_remove (nonb, nquad, fside->face, j);
+      p4est_dune_nonb_bface (nonb, fchildren[j]);
+    }
+
+    /* put child quadrants back into cache */
+    for (j = 0; j < P4EST_HALF; ++j) {
+      p4est_quad_nonb_insert (nonb, fchildren[j]);
     }
   }
 }
@@ -1475,20 +1536,9 @@ p4est_dune_nonb_volume (p4est_dune_nonb_t *nonb, p4est_quad_nonb_t *nquad)
   /* loop through all children of current quadrant */
   for (i = 0; i < P4EST_CHILDREN; ++i) {
 
-    /* create child recursion state */
+    /* create child for volume recursion */
     nchildren[i] = p4est_quad_nonb_child (nonb, nquad, i);
-
-    /* we go into the general recursion algorithm */
     p4est_dune_nonb_volume (nonb, nchildren[i]);
-
-#if 0
-    P4EST_LDEBUGF ("Inserting in tree %ld quadrant:\n",
-                   (long) nchild->skey.p.which_tree);
-    p4est_quadrant_print (SC_LP_ERROR, &nchild->skey);
-    P4EST_EXECUTE_ASSERT_TRUE
-      (sc_hash_insert_unique (nonb->qhash, nchild, &ifound));
-    P4EST_ASSERT ((p4est_quad_nonb_t *) *ifound == nchild);
-#endif
   }
 
   /* call face recursion for all faces inside this volume */
@@ -1515,20 +1565,7 @@ p4est_dune_nonb_volume (p4est_dune_nonb_t *nonb, p4est_quad_nonb_t *nquad)
 
     /* preserve temporary quadrant context */
     for (i = 0; i < P4EST_CHILDREN; ++i) {
-
-      /* cache quadrant for future reuse */
       p4est_quad_nonb_insert (nonb, nchildren[i]);
-
-#if 0
-      P4EST_LDEBUGF ("Removing in tree %ld quadrant:\n",
-                     (long) nchild->skey.p.which_tree);
-      p4est_quadrant_print (SC_LP_ERROR, &nchild->skey);
-
-      P4EST_EXECUTE_ASSERT_TRUE
-        (sc_hash_remove (nonb->qhash, nchild, &rfound));
-      P4EST_ASSERT ((p4est_quad_nonb_t *) rfound == nchild);
-      p4est_dune_nquad_free (nonb, nchild);
-#endif
     }
   }
 }
@@ -1585,6 +1622,12 @@ p4est_dune_iterate_nonb (p4est_t * p4est, p4est_ghost_t * ghost_layer,
   sc_array_init_count
     (&nonb->finfo.sides, sizeof (p4est_iter_face_side_t), 2);
 
+  /* prepare for tree boundary faces */
+  memcpy (&nonb->fbinfo, &nonb->finfo, sizeof (nonb->fbinfo));
+  nonb->fbinfo.tree_boundary = P4EST_CONNECT_FACE;
+  sc_array_init_count
+    (&nonb->fbinfo.sides, sizeof (p4est_iter_face_side_t), 1);
+
   /* loop over the local trees */
   for (tt = p4est->first_local_tree; tt <= p4est->last_local_tree; ++tt) {
 
@@ -1597,21 +1640,9 @@ p4est_dune_iterate_nonb (p4est_t * p4est, p4est_ghost_t * ghost_layer,
       fside->treeid = tt;
     }
 
-    /* setup root quadrant recursion state */
+    /* setup root quadrant for volume recursion */
     nquad = p4est_quad_nonb_root (nonb);
-
-    /* we go into the general recursion algorithm */
     p4est_dune_nonb_volume (nonb, nquad);
-
-#if 0
-    P4EST_LDEBUGF ("Removing in tree %ld quadrant:\n",
-                   (long) nquad->skey.p.which_tree);
-    p4est_quadrant_print (SC_LP_ERROR, &nquad->skey);
-    P4EST_EXECUTE_ASSERT_TRUE
-      (sc_hash_remove (nonb->qhash, nquad, &rfound));
-    P4EST_ASSERT ((p4est_quad_nonb_t *) rfound == nquad);
-    p4est_dune_nquad_free (nonb, nquad);
-#endif
 
     /* go into face recursion involving neighbor trees or boundary */
     if (nonb->iter_face != NULL) {
@@ -1641,9 +1672,13 @@ p4est_dune_iterate_nonb (p4est_t * p4est, p4est_ghost_t * ghost_layer,
             P4EST_ASSERT (orient == 0);
 
             /* this face is at a physical domain boundary */
+            fside = (p4est_iter_face_side_t *)
+              sc_array_index (&nonb->fbinfo.sides, 0);
+            fside->treeid = tt;
+            fside->face = face;
 
             /* we have no neighbor on the other side */
-
+            p4est_dune_nonb_bface (nonb, nquad);
           }
         }
       }
@@ -1658,7 +1693,7 @@ p4est_dune_iterate_nonb (p4est_t * p4est, p4est_ghost_t * ghost_layer,
     sc_hash_mru_t      *mru = nonb->mru[k];
 
     if (mru->num_inserted > 0 && mru->num_removed > 0) {
-      P4EST_LDEBUGF ("Level %d miss ratio insert %.3f remove %.3f\n", k,
+      P4EST_LDEBUGF ("Level %d miss ratio insert %.2f remove %.2f\n", k,
                      mru->insert_missed / (double) mru->num_inserted,
                      mru->remove_missed / (double) mru->num_removed);
     }
@@ -1669,6 +1704,7 @@ p4est_dune_iterate_nonb (p4est_t * p4est, p4est_ghost_t * ghost_layer,
   sc_hash_destroy (nonb->qhash);
   sc_mempool_destroy (nonb->qpool);
   sc_array_reset (&nonb->finfo.sides);
+  sc_array_reset (&nonb->fbinfo.sides);
 }
 
 void
