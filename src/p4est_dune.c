@@ -719,6 +719,9 @@ sc_hash_mru_consolidate (sc_hash_mru_t *mru)
     SC_ASSERT (drop != NULL);
     SC_ASSERT (drop->prev == NULL);
 
+    /* first remove element from hash */
+    P4EST_EXECUTE_ASSERT_TRUE (sc_hash_remove (mru->hash, drop, NULL));
+
     /* call the user's drop handler */
     if (mru->drop_fn != NULL) {
       mru->drop_fn (drop->data, mru->user);
@@ -1446,10 +1449,11 @@ p4est_dune_nonb_bface (p4est_dune_nonb_t *nonb, p4est_quad_nonb_t *nquad)
   P4EST_ASSERT (nonb->iter_face != NULL);
   P4EST_ASSERT (nquad != NULL);
 
-  /* if there are no local quadrants, we bail */
-  if (nquad->nvdesc == 0 || nquad->nvdesc == -2) {
+  /* if there are no local quadrant on this side, we bail */
+  if (nquad->squads.elem_count == 0) {
     return;
   }
+  P4EST_ASSERT (nquad->nvdesc != 0 && nquad->nvdesc != -2);
 
   /* the face has only one side */
   fside = (p4est_iter_face_side_t *)
