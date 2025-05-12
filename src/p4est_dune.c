@@ -1470,6 +1470,119 @@ p4est_dune_nonb_face (p4est_dune_nonb_t *nonb,
   }
 }
 
+/* called with fully initialized inter-tree face neighbor quadrants */
+static void
+p4est_dune_nonb_tface (p4est_dune_nonb_t *nonb,
+                       p4est_quad_nonb_t *nquads[2], const int ihang[2])
+{
+  int                 i, j, k;
+  int                 level[2], chang[2];
+  int                 face_corners[2][P4EST_HALF];
+  p4est_iter_face_side_t *fside, *fsides[2];
+  p4est_quad_nonb_t  *nq, *fchildren[2][P4EST_HALF];
+  p4est_quad_nonb_t  *cquads[2];
+
+  /* for now, assume this is a face within a tree */
+  P4EST_ASSERT (nonb != NULL);
+  P4EST_ASSERT (nonb->finfo.sides.elem_count == 2);
+  P4EST_ASSERT (nonb->iter_face != NULL);
+  P4EST_ASSERT (nquads[0] != NULL && nquads[1] != NULL);
+
+  /* if there are no local quadrants on either side, we bail */
+  if (nquads[0]->squads.elem_count == 0 && nquads[1]->squads.elem_count == 0) {
+    return;
+  }
+
+  /* figure out if we are already in a hanging situation */
+  for (k = 0; k < 2; ++k) {
+    level[k] = nquads[k]->skey.level;
+    fsides[k] = (p4est_iter_face_side_t *)
+      sc_array_index (&nonb->finfo.sides, k);
+  }
+
+  /* determine face corner permutation (non-trivial between trees) */
+  for (j = 0; j < P4EST_HALF; ++j) {
+    face_corners[0][j] = j;
+    face_corners[1][j] = p4est_connectivity_face_neighbor_face_corner
+      (j, fsides[0]->face, fsides[1]->face, nonb->finfo.orientation);
+  }
+
+  /* we will definitely execute the face callback or go into the recursion */
+  for (k = 0; k < 2; ++k) {
+    fchildren[k][0] = NULL;
+    nq = nquads[k];
+    fside = fsides[k];
+
+    /* investigate the various possible cases */
+    if (level[k] < level[!k]) {
+
+      /* if this is a larger side, it must be whole and stays unchanged */
+      P4EST_ASSERT (nq->nvdesc <= 0);
+      P4EST_ASSERT (!fside->is_hanging);
+    }
+    else if (nq->nvdesc <= 0) {
+
+      /* otherwise we must set new contents to the face side */
+      P4EST_ASSERT (nq->squads.elem_count <= 1);
+      P4EST_ASSERT (nq->ghosts.elem_count <= 1);
+
+      /* same size is initalized as full */
+      if (level[0] == level[1]) {
+        p4est_dune_nonb_full (nq, fside);
+      }
+      else {
+        P4EST_ASSERT (level[k] > level[!k]);
+
+        /* initialize a hanging side */
+        p4est_dune_nonb_hanging (nq, fside, ihang[k]);
+      }
+    }
+    else {
+
+      /* gather what's needed to loop over the children below */
+      for (j = 0; j < P4EST_HALF; ++j) {
+        i = face_corners[k][j];
+        fchildren[k][i] = p4est_quad_nonb_remove (nonb, nq, fside->face, i);
+      }
+    }
+  }
+
+  /* if both sides are full size, we evaluate the face directly */
+  if (nquads[0]->nvdesc <= 0 && nquads[1]->nvdesc <= 0) {
+    P4EST_ASSERT (nquads[0]->squads.elem_count == 1 ||
+                  nquads[1]->squads.elem_count == 1);
+    P4EST_ASSERT (fchildren[0][0] == NULL && fchildren[1][0] == NULL);
+
+    /* execute the face callback with two unsplit sides */
+    nonb->iter_face (&nonb->finfo, nonb->user_data);
+  }
+  else {
+    /* go down the face recursion */
+    for (j = 0; j < P4EST_HALF; ++j) {
+      for (k = 0; k < 2; ++k) {
+        if (nquads[k]->nvdesc <= 0) {
+          chang[k] = -1;
+          cquads[k] = nquads[k];
+        }
+        else {
+          chang[k] = face_corners[k][j];
+          cquads[k] = fchildren[k][j];
+        }
+      }
+      p4est_dune_nonb_tface (nonb, cquads, chang);
+    }
+
+    /* put child quadrants back into cache */
+    for (k = 0; k < 2; ++k) {
+      if (fchildren[k][0] != NULL) {
+        for (j = 0; j < P4EST_HALF; ++j) {
+          p4est_quad_nonb_insert (nonb, fchildren[k][j]);
+        }
+      }
+    }
+  }
+}
+
 /* called with fully initialized nquad contexts for this interface */
 static void
 p4est_dune_nonb_bface (p4est_dune_nonb_t *nonb, p4est_quad_nonb_t *nquad)
@@ -1620,7 +1733,7 @@ p4est_dune_iterate_nonb (p4est_t * p4est, p4est_ghost_t * ghost_layer,
   p4est_topidx_t      tt, nt;
   p4est_iter_face_side_t *fside;
   p4est_dune_nonb_t   snonb, *nonb = &snonb;
-  p4est_quad_nonb_t  *nquad;
+  p4est_quad_nonb_t  *nquad, *ntree;
 
   P4EST_ASSERT (p4est != NULL);
 
@@ -1680,12 +1793,14 @@ p4est_dune_iterate_nonb (p4est_t * p4est, p4est_ghost_t * ghost_layer,
     }
 
     /* setup root quadrant for volume recursion */
-    nquad = p4est_quad_nonb_root (nonb);
+    nquad = p4est_quad_nonb_root (nonb, tt);
     p4est_dune_nonb_volume (nonb, nquad);
 
     /* go into face recursion involving neighbor trees or boundary */
     if (nonb->iter_face != NULL) {
       p4est_connectivity_t *conn = nonb->p4est->connectivity;
+      p4est_quad_nonb_t  *cquads[2];
+      int                 chang[2];
       int                 orient;
 
       /* loop through all lesser tree neighbors for face recursion */
@@ -1694,31 +1809,55 @@ p4est_dune_iterate_nonb (p4est_t * p4est, p4est_ghost_t * ghost_layer,
         tf = conn->tree_to_face[P4EST_FACES * tt + face];
         orient = tf / P4EST_FACES;
         nface = tf % P4EST_FACES;
-        if (nt < tt) {
-          /* a tree that whose volume we have visited previously */
+        if (nt < tt || (nt == tt && nface < face)) {
 
-          /* look each lesser neighbor's root up in the cache */
+          /* a distinct tree whose volume we have visited previously */
+          nonb->finfo.orientation = orient;
+          nonb->finfo.tree_boundary = P4EST_CONNECT_FACE;
 
+          /* the lower tree's side comes first */
+          fside = (p4est_iter_face_side_t *)
+            sc_array_index (&nonb->finfo.sides, 0);
+          fside->treeid = nt;
+          fside->face = nface;
+          fside->is_hanging = 0;
+          fside = (p4est_iter_face_side_t *)
+            sc_array_index (&nonb->finfo.sides, 1);
+          P4EST_ASSERT (fside->treeid == tt);
+          fside->face = face;
+          fside->is_hanging = 0;
+
+          /* lookup neighbor tree's root in cache */
+          if (nt != tt) {
+            ntree = p4est_root_nonb_remove (nonb, nt);
+          }
+          else {
+            ntree = nquad;
+          }
+
+          /* inter-tree face recursion here */
+          cquads[0] = ntree;
+          cquads[1] = nquad;
+          chang[0] = chang[1] = -1;
+          p4est_dune_nonb_tface (nonb, cquads, chang);
+
+          /* re-insert neighbor root */
+          if (nt != tt) {
+            P4EST_ASSERT (ntree->skey.p.which_tree == nt);
+            p4est_quad_nonb_insert (nonb, ntree);
+          }
         }
-        else if (nt == tt) {
-          if (nface < face) {
-            /* this includes the same tree through a periodic boundary */
+        else if (nt == tt && nface == face) {
+          P4EST_ASSERT (orient == 0);
 
-            /* this tree has the same root */
+          /* this face is at a physical domain boundary */
+          fside = (p4est_iter_face_side_t *)
+            sc_array_index (&nonb->fbinfo.sides, 0);
+          fside->treeid = tt;
+          fside->face = face;
 
-          }
-          else if (nface == face) {
-            P4EST_ASSERT (orient == 0);
-
-            /* this face is at a physical domain boundary */
-            fside = (p4est_iter_face_side_t *)
-              sc_array_index (&nonb->fbinfo.sides, 0);
-            fside->treeid = tt;
-            fside->face = face;
-
-            /* we have no neighbor on the other side */
-            p4est_dune_nonb_bface (nonb, nquad);
-          }
+          /* we have no neighbor on the other side */
+          p4est_dune_nonb_bface (nonb, nquad);
         }
       }
 
