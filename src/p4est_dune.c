@@ -1177,7 +1177,9 @@ p4est_quad_nonb_split (p4est_dune_nonb_t *nonb, p4est_quad_nonb_t *nquad)
   P4EST_ASSERT (p4est_quadrant_is_valid (&nquad->skey));
 
   /* this quadrant may be empty entirely */
-  if ((lz = nquad->squads.elem_count) + (glz = nquad->ghosts.elem_count) == 0) {
+  lz = nquad->squads.elem_count;
+  glz = nquad->ghosts.elem_count;
+  if (lz + glz == 0) {
     return;
   }
 
@@ -1608,7 +1610,7 @@ p4est_dune_iterate_nonb (p4est_t * p4est, p4est_ghost_t * ghost_layer,
   for (k = 0; k < P4EST_MAXLEVEL; ++k) {
     nonb->mru[k] = sc_hash_mru_new (p4est_quad_nonb_hash,
                                     p4est_quad_nonb_is_equal,
-                                    p4est_quad_nonb_drop, nonb, 1 << 14);
+                                    p4est_quad_nonb_drop, nonb, 1 << 18);
   }
 
   /* prepare reusable volume context */
