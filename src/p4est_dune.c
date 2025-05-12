@@ -1010,7 +1010,6 @@ typedef struct p4est_dune_nonb
   sc_hash_mru_t      *mru[P4EST_MAXLEVEL];
 
   /* state of recursion */
-  p4est_tree_t       *tree;
   p4est_iter_volume_info_t vinfo;
   p4est_iter_face_info_t finfo;
   p4est_iter_face_info_t fbinfo;
@@ -1122,6 +1121,7 @@ p4est_dune_nonb_hanging (p4est_quad_nonb_t *nq,
 {
   P4EST_ASSERT (nq != NULL);
   P4EST_ASSERT (fside != NULL);
+  P4EST_ASSERT (0 <= ihang && ihang < P4EST_HALF);
 
   /* initialize a hanging face side */
   fside->is_hanging = 1;
@@ -1160,7 +1160,6 @@ p4est_dune_nonb_hanging (p4est_quad_nonb_t *nq,
   }
 
   /* do not forget the hanging face number within parent face */
-  P4EST_ASSERT (0 <= ihang && ihang < P4EST_HALF);
   fside->is.hanging.quadid[1] = ihang;
 }
 
@@ -1257,24 +1256,28 @@ p4est_quad_nonb_child (p4est_dune_nonb_t *nonb,
 }
 
 static p4est_quad_nonb_t *
-p4est_quad_nonb_root (p4est_dune_nonb_t *nonb)
+p4est_quad_nonb_root (p4est_dune_nonb_t *nonb, p4est_topidx_t tt)
 {
   size_t              goz, glz;
-  p4est_topidx_t      tt;
+  p4est_tree_t       *tree;
   p4est_quad_nonb_t  *nroot;
 
   /* verify preconditions */
   P4EST_ASSERT (nonb != NULL);
+  P4EST_ASSERT (0 <= tt && tt < nonb->p4est->connectivity->num_trees);
 
   /* allocate fresh quadrant object */
   nroot = p4est_dune_nquad_alloc (nonb);
   memset (nroot, 0, sizeof (*nroot));
 
-  /* set root coordinates */
+  /* set root coordinates and tree */
   p4est_quadrant_root (&nroot->skey);
-  tt = nroot->skey.p.which_tree = nonb->vinfo.treeid;
-  sc_array_init_view (&nroot->squads, &nonb->tree->quadrants,
-                      0, nonb->tree->quadrants.elem_count);
+  nroot->skey.p.which_tree = tt;
+
+  /* view local quadrants if any */
+  tree = p4est_tree_array_index (nonb->p4est->trees, tt);
+  sc_array_init_view (&nroot->squads, &tree->quadrants,
+                      0, tree->quadrants.elem_count);
 
   /* setup ghost information similarly */
   if (nonb->ghost_layer != NULL) {
@@ -1336,6 +1339,37 @@ p4est_quad_nonb_remove (p4est_dune_nonb_t *nonb, p4est_quad_nonb_t *nquad,
 
   /* return qualified child object */
   return nchild;
+}
+
+static p4est_quad_nonb_t *
+p4est_root_nonb_remove (p4est_dune_nonb_t *nonb, p4est_topidx_t tt)
+{
+  void               *rfound;
+  p4est_quad_nonb_t   nkey, *nroot;
+
+  P4EST_ASSERT (nonb != NULL);
+  P4EST_ASSERT (0 <= tt && tt < nonb->p4est->connectivity->num_trees);
+
+  /* access the child quadrants touching the face */
+  p4est_quadrant_root (&nkey.skey);
+  nkey.skey.p.which_tree = tt;
+
+  /* lookup quadrant in cache */
+  if (sc_hash_mru_remove (nonb->mru[nkey.skey.level], &nkey, &rfound)) {
+
+    /* this quadrant had been present */
+    nroot = (p4est_quad_nonb_t *) rfound;
+    P4EST_ASSERT (p4est_quadrant_is_valid (&nroot->skey));
+    P4EST_ASSERT (nroot->skey.level == 0);
+  }
+  else {
+
+    /* recreate quadrant object for recursion */
+    nroot = p4est_quad_nonb_root (nonb, tt);
+  }
+
+  /* return qualified root object */
+  return nroot;
 }
 
 /* called with fully initialized nquad contexts for this interface */
@@ -1610,7 +1644,7 @@ p4est_dune_iterate_nonb (p4est_t * p4est, p4est_ghost_t * ghost_layer,
   for (k = 0; k < P4EST_MAXLEVEL; ++k) {
     nonb->mru[k] = sc_hash_mru_new (p4est_quad_nonb_hash,
                                     p4est_quad_nonb_is_equal,
-                                    p4est_quad_nonb_drop, nonb, 1 << 18);
+                                    p4est_quad_nonb_drop, nonb, 1 << 12);
   }
 
   /* prepare reusable volume context */
@@ -1623,8 +1657,6 @@ p4est_dune_iterate_nonb (p4est_t * p4est, p4est_ghost_t * ghost_layer,
   /* prepare reusable face context */
   nonb->finfo.p4est = p4est;
   nonb->finfo.ghost_layer = ghost_layer;
-  nonb->finfo.orientation = 0;
-  nonb->finfo.tree_boundary = 0;
   sc_array_init_count
     (&nonb->finfo.sides, sizeof (p4est_iter_face_side_t), 2);
 
@@ -1638,8 +1670,9 @@ p4est_dune_iterate_nonb (p4est_t * p4est, p4est_ghost_t * ghost_layer,
   for (tt = p4est->first_local_tree; tt <= p4est->last_local_tree; ++tt) {
 
     /* go into volume recursion with the tree root */
-    nonb->tree = p4est_tree_array_index (p4est->trees, tt);
     nonb->vinfo.treeid = tt;
+    nonb->finfo.orientation = 0;
+    nonb->finfo.tree_boundary = 0;
     for (k = 0; k < 2; ++k) {
       fside = (p4est_iter_face_side_t *)
         sc_array_index (&nonb->finfo.sides, k);
