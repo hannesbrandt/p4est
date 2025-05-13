@@ -199,12 +199,15 @@ static int
 run_dune_interface (sc_MPI_Comm mpicomm, p4est_connectivity_t * conn,
                     int maxlevel)
 {
-  int                 i, j;
-  int                 ctype;
+  int                 i;
   p4est_gloidx_t      gnum;
   p4est_t            *p4est;
   p4est_ghost_t      *ghost;
+#if 0
+  int                 j;
+  int                 ctype;
   p4est_dune_numbers_t *dn;
+#endif
 
   /* generate mesh with some arbitrary adaptive refinement */
   p4est = p4est_new_ext (mpicomm, conn, 0, 0, 1, 0, NULL, NULL);
@@ -237,6 +240,7 @@ run_dune_interface (sc_MPI_Comm mpicomm, p4est_connectivity_t * conn,
   /* we must provide a ghost layer */
   ghost = p4est_ghost_new (p4est, P4EST_CONNECT_FULL);
 
+#if 0
   /* initialize DUNE node number export */
   p4est_dune_numbers_params_t dparams, *pa = &dparams;
   p4est_dune_numbers_params_init (pa);
@@ -256,6 +260,7 @@ run_dune_interface (sc_MPI_Comm mpicomm, p4est_connectivity_t * conn,
     /* free memory in generated interface */
     p4est_dune_numbers_destroy (dn);
   }
+#endif
 
   /* run face iterator */
   run_dune_iterator (p4est, ghost);
