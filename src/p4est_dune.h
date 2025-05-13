@@ -114,6 +114,16 @@ p4est_dune_numbers_t *p4est_dune_numbers_new (p4est_t * p4est,
  */
 void                p4est_dune_numbers_destroy (p4est_dune_numbers_t * dn);
 
+/** Volume and face iterator over a 2:1 balanced forest.
+ * See \ref p4est_dune_iterate for a detailed reference.
+ */
+void                p4est_dune_iterate_balanced (p4est_t *p4est,
+                                                 p4est_ghost_t *ghost_layer,
+                                                 void *user_data,
+                                                 p4est_iter_volume_t
+                                                 iter_volume,
+                                                 p4est_iter_face_t iter_face);
+
 /** Execute user supplied callbacks at every local volume and face.
  *
  * Execute the user-supplied callback functions at every volume and face in
@@ -143,6 +153,7 @@ void                p4est_dune_numbers_destroy (p4est_dune_numbers_t * dn);
  * its face siblings in the variable is.hanging.quadid[1], values in [0, 2).
  *
  * \param[in] p4est          The forest to iterate over.
+ *                           It is not required to be 2:1 balanced.
  * \param[in] ghost_layer    Valid ghost structure or NULL.
  * \param[in,out] user_data  optional context to supply to each callback.
  * \param[in] iter_volume    callback function for every quadrant interior.

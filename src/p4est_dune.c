@@ -579,12 +579,13 @@ dune_iter_face (p4est_iter_face_info_t * info, void *user_data)
   }
 }
 
-static void
-p4est_dune_iterate_wrap (p4est_t * p4est, p4est_ghost_t * ghost_layer,
-                         void *user_data, p4est_iter_volume_t iter_volume,
-                         p4est_iter_face_t iter_face)
+void
+p4est_dune_iterate_balanced (p4est_t *p4est, p4est_ghost_t *ghost_layer,
+                             void *user_data, p4est_iter_volume_t iter_volume,
+                             p4est_iter_face_t iter_face)
 {
   P4EST_ASSERT (p4est != NULL);
+  P4EST_ASSERT (p4est_is_balanced (p4est, P4EST_CONNECT_FACE));
 
   if (iter_face == NULL) {
     /* no need to do anything special: pass through */
@@ -1660,9 +1661,10 @@ p4est_nonb_face_corners (p4est_dune_nonb_t *nonb)
 }
 
 static void
-p4est_dune_iterate_nonb (p4est_t * p4est, p4est_ghost_t * ghost_layer,
-                         void *user_data, p4est_iter_volume_t iter_volume,
-                         p4est_iter_face_t iter_face)
+p4est_dune_iterate_nonbalanced (p4est_t *p4est, p4est_ghost_t *ghost_layer,
+                                void *user_data,
+                                p4est_iter_volume_t iter_volume,
+                                p4est_iter_face_t iter_face)
 {
   int                 k;
   int                 tf, face, nface;
@@ -1839,11 +1841,11 @@ p4est_dune_iterate (p4est_t * p4est, p4est_ghost_t * ghost_layer,
                     p4est_iter_face_t iter_face)
 {
   if (1) {
-    p4est_dune_iterate_wrap (p4est, ghost_layer, user_data,
-                             iter_volume, iter_face);
+    p4est_dune_iterate_nonbalanced (p4est, ghost_layer, user_data,
+                                    iter_volume, iter_face);
   }
   else {
-    p4est_dune_iterate_nonb (p4est, ghost_layer, user_data,
-                             iter_volume, iter_face);
+    p4est_dune_iterate_balanced (p4est, ghost_layer, user_data,
+                                 iter_volume, iter_face);
   }
 }
