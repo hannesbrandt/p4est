@@ -143,7 +143,7 @@ void                p4est_dune_numbers_destroy (p4est_dune_numbers_t * dn);
  * its face siblings in the variable is.hanging.quadid[1], values in [0, 2).
  *
  * \param[in] p4est          The forest to iterate over.
- * \param[in] ghost_layer    Required valid ghost structure.
+ * \param[in] ghost_layer    Valid ghost structure or NULL.
  * \param[in,out] user_data  optional context to supply to each callback.
  * \param[in] iter_volume    callback function for every quadrant interior.
  * \param[in] iter_face      callback function for every face between.

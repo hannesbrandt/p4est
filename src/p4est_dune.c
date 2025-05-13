@@ -1013,7 +1013,7 @@ typedef struct p4est_dune_nonb
   p4est_iter_volume_info_t vinfo;
   p4est_iter_face_info_t finfo;
   p4est_iter_face_info_t fbinfo;
-  int                 face_corners[2][P4EST_HALF];
+  int                 face_corners[P4EST_HALF];
 }
 p4est_dune_nonb_t;
 
@@ -1380,6 +1380,7 @@ p4est_dune_nonb_tface (p4est_dune_nonb_t *nonb,
 {
   int                 j, k;
   int                 level[2], chang[2];
+  int                 fcorners[2][P4EST_HALF];
   p4est_iter_face_side_t *fside, *fsides[2];
   p4est_quad_nonb_t  *nq, *fchildren[2][P4EST_HALF];
   p4est_quad_nonb_t  *cquads[2];
@@ -1405,6 +1406,7 @@ p4est_dune_nonb_tface (p4est_dune_nonb_t *nonb,
   /* we will definitely execute the face callback or go into the recursion */
   for (k = 0; k < 2; ++k) {
     fchildren[k][0] = NULL;
+    fcorners[k][0] = -1;
     nq = nquads[k];
     fside = fsides[k];
 
@@ -1433,11 +1435,17 @@ p4est_dune_nonb_tface (p4est_dune_nonb_t *nonb,
       }
     }
     else {
+      P4EST_ASSERT (level[k] >= level[!k]);
 
       /* gather what's needed to loop over the children below */
       for (j = 0; j < P4EST_HALF; ++j) {
+
+        /* we permute the corners of the higher numbered face only
+           if the quadrants are at the same level as the other side */
+        fcorners[k][j] =
+          (k == 0 || nquads[!k]->nvdesc <= 0) ? j : nonb->face_corners[j];
         fchildren[k][j] = p4est_quad_nonb_remove
-          (nonb, nq, fside->face, nonb->face_corners[k][j]);
+          (nonb, nq, fside->face, fcorners[k][j]);
       }
     }
   }
@@ -1447,6 +1455,7 @@ p4est_dune_nonb_tface (p4est_dune_nonb_t *nonb,
     P4EST_ASSERT (nquads[0]->squads.elem_count == 1 ||
                   nquads[1]->squads.elem_count == 1);
     P4EST_ASSERT (fchildren[0][0] == NULL && fchildren[1][0] == NULL);
+    P4EST_ASSERT (fcorners[0][0] == -1 && fcorners[1][0] == -1);
 
     /* execute the face callback with two unsplit sides */
     nonb->iter_face (&nonb->finfo, nonb->user_data);
@@ -1456,11 +1465,13 @@ p4est_dune_nonb_tface (p4est_dune_nonb_t *nonb,
     for (j = 0; j < P4EST_HALF; ++j) {
       for (k = 0; k < 2; ++k) {
         if (nquads[k]->nvdesc <= 0) {
+          P4EST_ASSERT (fchildren[k][0] == NULL);
+          P4EST_ASSERT (fcorners[k][0] == -1);
           chang[k] = -1;
           cquads[k] = nquads[k];
         }
         else {
-          chang[k] = nonb->face_corners[k][j];
+          chang[k] = fcorners[k][j];
           cquads[k] = fchildren[k][j];
         }
       }
@@ -1470,6 +1481,7 @@ p4est_dune_nonb_tface (p4est_dune_nonb_t *nonb,
     /* put child quadrants back into cache */
     for (k = 0; k < 2; ++k) {
       if (fchildren[k][0] != NULL) {
+        P4EST_ASSERT (fcorners[k][0] >= 0);
         for (j = 0; j < P4EST_HALF; ++j) {
           p4est_quad_nonb_insert (nonb, fchildren[k][j]);
         }
@@ -1484,7 +1496,7 @@ p4est_dune_nonb_bface (p4est_dune_nonb_t *nonb, p4est_quad_nonb_t *nquad)
 {
   int                 j;
   p4est_iter_face_side_t *fside;
-  p4est_quad_nonb_t  *fchildren[P4EST_HALF];
+  p4est_quad_nonb_t  *fchild;
 
   /* for now, assume this is a face within a tree */
   P4EST_ASSERT (nonb != NULL);
@@ -1514,17 +1526,13 @@ p4est_dune_nonb_bface (p4est_dune_nonb_t *nonb, p4est_quad_nonb_t *nquad)
   }
   else {
     P4EST_ASSERT (nquad->nvdesc > 0);
-    P4EST_ASSERT (nquad->squads.elem_count >= 1);
+    P4EST_ASSERT (nquad->squads.elem_count > 0);
 
     /* loop and recurse over the children */
     for (j = 0; j < P4EST_HALF; ++j) {
-      fchildren[j] = p4est_quad_nonb_remove (nonb, nquad, fside->face, j);
-      p4est_dune_nonb_bface (nonb, fchildren[j]);
-    }
-
-    /* put child quadrants back into cache */
-    for (j = 0; j < P4EST_HALF; ++j) {
-      p4est_quad_nonb_insert (nonb, fchildren[j]);
+      fchild = p4est_quad_nonb_remove (nonb, nquad, fside->face, j);
+      p4est_dune_nonb_bface (nonb, fchild);
+      p4est_quad_nonb_insert (nonb, fchild);
     }
   }
 }
@@ -1639,13 +1647,12 @@ p4est_nonb_face_corners (p4est_dune_nonb_t *nonb)
 
   /* determine face corner permutation (non-trivial between trees) */
   for (j = 0; j < P4EST_HALF; ++j) {
-    nonb->face_corners[0][j] = j;
     if (!nonb->finfo.tree_boundary) {
-      nonb->face_corners[1][j] = j;
+      nonb->face_corners[j] = j;
     }
     else {
       P4EST_ASSERT (nonb->finfo.tree_boundary == P4EST_CONNECT_FACE);
-      nonb->face_corners[1][j] =
+      nonb->face_corners[j] =
         p4est_connectivity_face_neighbor_face_corner
         (j, fsides[0]->face, fsides[1]->face, nonb->finfo.orientation);
     }
@@ -1811,9 +1818,9 @@ p4est_dune_iterate_nonb (p4est_t * p4est, p4est_ghost_t * ghost_layer,
   for (k = 0; k < P4EST_MAXLEVEL; ++k) {
     sc_hash_mru_t      *mru = nonb->mru[k];
 
-    if (mru->num_inserted > 0 && mru->num_removed > 0) {
-      P4EST_LDEBUGF ("Level %d miss ratio insert %.2f remove %.2f\n", k,
-                     mru->insert_missed / (double) mru->num_inserted,
+    if (mru->num_removed > 0) {
+      P4EST_LDEBUGF ("Level %2d insert %8ld remove %8ld miss %.2f\n", k,
+                     (long) mru->num_inserted, (long) mru->num_removed,
                      mru->remove_missed / (double) mru->num_removed);
     }
     sc_hash_mru_destroy (mru);
