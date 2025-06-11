@@ -31,9 +31,11 @@
 #ifndef P4_TO_P8
 #include <p4est_extended.h>
 #include <p4est_search.h>
+#include <p4est_vtk.h>
 #else
 #include <p8est_extended.h>
 #include <p8est_search.h>
+#include <p8est_vtk.h>
 #endif
 
 int
@@ -62,6 +64,15 @@ main (int argc, char **argv)
 #endif
     );
   p4est = p4est_new_ext (sc_MPI_COMM_WORLD, conn, 0, 3, 1, 0, NULL, NULL);
+
+  /* output forest to vtk */
+  p4est_vtk_write_file (p4est, NULL,
+#ifndef P4_TO_P8
+                        "search_partition2"
+#else
+                        "search_partition3"
+#endif
+    );
 
   /* Free memory. */
   p4est_destroy (p4est);
