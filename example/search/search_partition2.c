@@ -28,6 +28,7 @@
  * brick forest and verifies the results by comparing them to the local search.
  */
 
+#include <sc_options.h>
 #ifndef P4_TO_P8
 #include <p4est_extended.h>
 #include <p4est_search.h>
@@ -42,14 +43,16 @@
 
 /* define centers of refinement and point creation */
 #ifndef P4_TO_P8
-const double        point_a[3] = { 0.2, 0.4, 0. };
-const double        point_b[3] = { 0.7, 0.5, 0. };
-const double        point_c[3] = { 0.3, 0.6, 0. };
+static const double point_a[3] = { 0.2, 0.4, 0. };
+static const double point_b[3] = { 0.7, 0.5, 0. };
+static const double point_c[3] = { 0.3, 0.6, 0. };
 #else
-const double        point_a[3] = { 0.2, 0.4, 0.4 };
-const double        point_b[3] = { 0.7, 0.5, 0.5 };
-const double        point_c[3] = { 0.3, 0.6, 0.8 };
+static const double point_a[3] = { 0.2, 0.4, 0.4 };
+static const double point_b[3] = { 0.7, 0.5, 0.5 };
+static const double point_c[3] = { 0.3, 0.6, 0.8 };
 #endif
+
+static int          uniform_level, max_level;
 
 static int
 refine_fn (p4est_t *p4est, p4est_topidx_t which_tree,
@@ -84,23 +87,15 @@ refine_fn (p4est_t *p4est, p4est_topidx_t which_tree,
   min_dist = SC_MIN (min_dist, sqrt (dist));
 
   /* refine if quadrant center is close enough to either point a or point b */
-  return (quadrant->level < 7 - floor (min_dist / 0.05));
+  return (quadrant->level <
+          max_level - floor (min_dist * (max_level - uniform_level) / 0.2));
 }
 
-int
-main (int argc, char **argv)
+static void
+run ()
 {
-  int                 mpiret;
   p4est_connectivity_t *conn;
   p4est_t            *p4est;
-
-  /* MPI initialization. */
-  mpiret = sc_MPI_Init (&argc, &argv);
-  SC_CHECK_MPI (mpiret);
-
-  /* Package init. */
-  sc_init (sc_MPI_COMM_WORLD, 1, 1, NULL, SC_LP_DEFAULT);
-  p4est_init (NULL, SC_LP_DEFAULT);
 
   /* Create brick p4est. */
   conn = p4est_connectivity_new_brick (2, 2,
@@ -112,7 +107,9 @@ main (int argc, char **argv)
                                        , 0
 #endif
     );
-  p4est = p4est_new_ext (sc_MPI_COMM_WORLD, conn, 0, 3, 1, 0, NULL, NULL);
+  p4est =
+    p4est_new_ext (sc_MPI_COMM_WORLD, conn, 0, uniform_level, 1, 0, NULL,
+                   NULL);
   p4est_refine (p4est, 1, refine_fn, NULL);
 
   /* output forest to vtk */
@@ -127,8 +124,66 @@ main (int argc, char **argv)
   /* Free memory. */
   p4est_destroy (p4est);
   p4est_connectivity_destroy (conn);
+}
+
+int
+main (int argc, char **argv)
+{
+  int                 mpiret;
+  sc_options_t       *opt;
+  int                 first_argc, ue;
+
+  /* MPI initialization. */
+  mpiret = sc_MPI_Init (&argc, &argv);
+  SC_CHECK_MPI (mpiret);
+
+  /* Package init. */
+  sc_init (sc_MPI_COMM_WORLD, 1, 1, NULL, SC_LP_DEFAULT);
+  p4est_init (NULL, SC_LP_DEFAULT);
+
+  opt = sc_options_new (argv[0]);
+  sc_options_add_int (opt, 'u', "uniform_level", &uniform_level, 3,
+                      "Level of uniform refinement");
+  sc_options_add_int (opt, 'm', "max_level", &max_level, 7,
+                      "Level of maximum refinement");
+
+  /* proceed in run-once loop for clean abort */
+  ue = 0;
+  do {
+    first_argc = sc_options_parse (p4est_package_id, SC_LP_DEFAULT,
+                                   opt, argc, argv);
+    if (first_argc < 0) {
+      P4EST_GLOBAL_LERROR ("Invalid option format.\n");
+      ue = 1;
+      break;
+    }
+    sc_options_print_summary (p4est_package_id, SC_LP_ESSENTIAL, opt);
+
+    /* check options for consistency */
+    if (uniform_level < 0 || uniform_level > P4EST_QMAXLEVEL) {
+      P4EST_GLOBAL_LERRORF ("Uniform level out of bounds 0..%d\n",
+                            P4EST_QMAXLEVEL);
+      ue = 1;
+    }
+    if (max_level < 0 || max_level > P4EST_QMAXLEVEL) {
+      P4EST_GLOBAL_LERRORF ("Maximum Level out of bounds 0..%d\n",
+                            P4EST_QMAXLEVEL);
+      ue = 1;
+    }
+    if (ue) {
+      break;
+    }
+
+    /* run example */
+    run ();
+  }
+  while (0);
+  if (ue) {
+    sc_options_print_usage (p4est_package_id, SC_LP_ERROR, opt, NULL);
+  }
 
   /* Close MPI environment. */
+  sc_options_destroy (opt);
   sc_finalize ();
   mpiret = sc_MPI_Finalize ();
   SC_CHECK_MPI (mpiret);
