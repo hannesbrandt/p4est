@@ -42,17 +42,14 @@
 #define COORDINATE_IROOTLEN (1. / P4EST_ROOT_LEN)
 
 /* define centers of refinement and point creation */
-#ifndef P4_TO_P8
-static const double point_a[3] = { 0.2, 0.4, 0. };
-static const double point_b[3] = { 0.7, 0.5, 0. };
-static const double point_c[3] = { 0.3, 0.6, 0. };
-#else
-static const double point_a[3] = { 0.2, 0.4, 0.4 };
-static const double point_b[3] = { 0.7, 0.5, 0.5 };
-static const double point_c[3] = { 0.3, 0.6, 0.8 };
-#endif
+typedef struct search_partition_global
+{
+  double              a[3], b[3], c[3];
+  int                 uniform_level;
+  int                 max_level;
+}
+search_partition_global_t;
 
-static int          uniform_level, max_level;
 
 static int
 refine_fn (p4est_t *p4est, p4est_topidx_t which_tree,
@@ -61,6 +58,12 @@ refine_fn (p4est_t *p4est, p4est_topidx_t which_tree,
   p4est_qcoord_t      h2;
   double              xyz[3];
   double              dist, min_dist;
+
+  P4EST_ASSERT (p4est != NULL);
+  P4EST_ASSERT (p4est->user_pointer != NULL);
+  search_partition_global_t *g =
+    (search_partition_global_t *) p4est->user_pointer;
+  P4EST_ASSERT (quadrant != NULL);
 
   /* get quadrant center reference coordinates in the unit square */
   P4EST_ASSERT (which_tree < P4EST_CHILDREN);   /* assert we have a 2x2(x2) brick */
@@ -75,24 +78,25 @@ refine_fn (p4est_t *p4est, p4est_topidx_t which_tree,
 #endif
 
   /* compute distance to point a */
-  dist = (point_a[0] - xyz[0]) * (point_a[0] - xyz[0]) +
-    (point_a[1] - xyz[1]) * (point_a[1] - xyz[1]) +
-    (point_a[2] - xyz[2]) * (point_a[2] - xyz[2]);
+  dist = (g->a[0] - xyz[0]) * (g->a[0] - xyz[0]) +
+    (g->a[1] - xyz[1]) * (g->a[1] - xyz[1]) +
+    (g->a[2] - xyz[2]) * (g->a[2] - xyz[2]);
   min_dist = sqrt (dist);
 
   /* compute distance to point b */
-  dist = (point_b[0] - xyz[0]) * (point_b[0] - xyz[0]) +
-    (point_b[1] - xyz[1]) * (point_b[1] - xyz[1]) +
-    (point_b[2] - xyz[2]) * (point_b[2] - xyz[2]);
+  dist = (g->b[0] - xyz[0]) * (g->b[0] - xyz[0]) +
+    (g->b[1] - xyz[1]) * (g->b[1] - xyz[1]) +
+    (g->b[2] - xyz[2]) * (g->b[2] - xyz[2]);
   min_dist = SC_MIN (min_dist, sqrt (dist));
 
   /* refine if quadrant center is close enough to either point a or point b */
   return (quadrant->level <
-          max_level - floor (min_dist * (max_level - uniform_level) / 0.2));
+          g->max_level -
+          floor (min_dist * (g->max_level - g->uniform_level) / 0.2));
 }
 
 static void
-run ()
+run (search_partition_global_t *g)
 {
   p4est_connectivity_t *conn;
   p4est_t            *p4est;
@@ -108,8 +112,10 @@ run ()
 #endif
     );
   p4est =
-    p4est_new_ext (sc_MPI_COMM_WORLD, conn, 0, uniform_level, 1, 0, NULL,
-                   NULL);
+    p4est_new_ext (sc_MPI_COMM_WORLD, conn, 0, g->uniform_level, 1, 0, NULL,
+                   g);
+
+  /* refine the forest adaptively around two points g->a and g->b */
   p4est_refine (p4est, 1, refine_fn, NULL);
 
   /* output forest to vtk */
@@ -132,6 +138,7 @@ main (int argc, char **argv)
   int                 mpiret;
   sc_options_t       *opt;
   int                 first_argc, ue;
+  search_partition_global_t global, *g = &global;
 
   /* MPI initialization. */
   mpiret = sc_MPI_Init (&argc, &argv);
@@ -142,9 +149,9 @@ main (int argc, char **argv)
   p4est_init (NULL, SC_LP_DEFAULT);
 
   opt = sc_options_new (argv[0]);
-  sc_options_add_int (opt, 'u', "uniform_level", &uniform_level, 3,
+  sc_options_add_int (opt, 'u', "uniform_level", &g->uniform_level, 3,
                       "Level of uniform refinement");
-  sc_options_add_int (opt, 'm', "max_level", &max_level, 7,
+  sc_options_add_int (opt, 'm', "max_level", &g->max_level, 7,
                       "Level of maximum refinement");
 
   /* proceed in run-once loop for clean abort */
@@ -160,12 +167,12 @@ main (int argc, char **argv)
     sc_options_print_summary (p4est_package_id, SC_LP_ESSENTIAL, opt);
 
     /* check options for consistency */
-    if (uniform_level < 0 || uniform_level > P4EST_QMAXLEVEL) {
+    if (g->uniform_level < 0 || g->uniform_level > P4EST_QMAXLEVEL) {
       P4EST_GLOBAL_LERRORF ("Uniform level out of bounds 0..%d\n",
                             P4EST_QMAXLEVEL);
       ue = 1;
     }
-    if (max_level < 0 || max_level > P4EST_QMAXLEVEL) {
+    if (g->max_level < 0 || g->max_level > P4EST_QMAXLEVEL) {
       P4EST_GLOBAL_LERRORF ("Maximum Level out of bounds 0..%d\n",
                             P4EST_QMAXLEVEL);
       ue = 1;
@@ -174,8 +181,31 @@ main (int argc, char **argv)
       break;
     }
 
+    /* define centers of refinement and point creation */
+    g->a[0] = 0.2;
+    g->a[1] = 0.4;
+#ifndef P4_TO_P8
+    g->a[2] = 0.;
+#else
+    g->a[2] = 0.4;
+#endif
+    g->b[0] = 0.7;
+    g->b[1] = 0.5;
+#ifndef P4_TO_P8
+    g->b[2] = 0.;
+#else
+    g->b[2] = 0.5;
+#endif
+    g->c[0] = 0.3;
+    g->c[1] = 0.6;
+#ifndef P4_TO_P8
+    g->c[2] = 0.;
+#else
+    g->c[2] = 0.8;
+#endif
+
     /* run example */
-    run ();
+    run (g);
   }
   while (0);
   if (ue) {
