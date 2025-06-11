@@ -47,9 +47,17 @@ typedef struct search_partition_global
   double              a[3], b[3], c[3];
   int                 uniform_level;
   int                 max_level;
+  sc_array_t         *queries;  /* array of query points */
 }
 search_partition_global_t;
 
+typedef struct search_point
+{
+  double              xyz[3];   /* 3D coordinates */
+  int                 is_local; /* set to 1, if found in local search */
+  int                 rank;     /* rank assigned during partition search */
+}
+search_point_t;
 
 static int
 refine_fn (p4est_t *p4est, p4est_topidx_t which_tree,
@@ -96,6 +104,43 @@ refine_fn (p4est_t *p4est, p4est_topidx_t which_tree,
 }
 
 static void
+generate_points (search_partition_global_t *g)
+{
+  size_t              iq, nqh;
+  int                 id;
+  search_point_t     *sp;
+  double              t;
+
+  g->queries = sc_array_new_count (sizeof (search_point_t), 1000);
+  sc_array_memset (g->queries, 0);
+
+  nqh = g->queries->elem_count / 2;
+  srand (0);
+  for (iq = 0; iq < g->queries->elem_count; iq++) {
+    sp = (search_point_t *) sc_array_index (g->queries, iq);
+    sp->is_local = -1;
+    sp->rank = -1;
+    for (id = 0; id < P4EST_DIM; id++) {
+      sp->xyz[id] = (double) rand () / RAND_MAX;
+    }
+
+    /* move point closer to g->b or g->c depending on iq and random t */
+    t = pow ((double) rand () / RAND_MAX, 3);
+    /* move the point to position sp->xyz * t + (1 - t) * {g->b,g->c} */
+    if (iq <= nqh) {
+      sp->xyz[0] = t * sp->xyz[0] + (1 - t) * g->b[0];
+      sp->xyz[1] = t * sp->xyz[1] + (1 - t) * g->b[1];
+      sp->xyz[2] = t * sp->xyz[2] + (1 - t) * g->b[2];
+    }
+    else {
+      sp->xyz[0] = t * sp->xyz[0] + (1 - t) * g->c[0];
+      sp->xyz[1] = t * sp->xyz[1] + (1 - t) * g->c[1];
+      sp->xyz[2] = t * sp->xyz[2] + (1 - t) * g->c[2];
+    }
+  }
+}
+
+static void
 run (search_partition_global_t *g)
 {
   p4est_connectivity_t *conn;
@@ -117,6 +162,10 @@ run (search_partition_global_t *g)
 
   /* refine the forest adaptively around two points g->a and g->b */
   p4est_refine (p4est, 1, refine_fn, NULL);
+  p4est_partition (p4est, 0, NULL);
+
+  /* generate search points */
+  generate_points (g);
 
   /* output forest to vtk */
   p4est_vtk_write_file (p4est, NULL,
@@ -128,6 +177,7 @@ run (search_partition_global_t *g)
     );
 
   /* Free memory. */
+  sc_array_destroy (g->queries);
   p4est_destroy (p4est);
   p4est_connectivity_destroy (conn);
 }
