@@ -29,8 +29,10 @@
  */
 
 #ifndef P4_TO_P8
+#include <p4est_extended.h>
 #include <p4est_search.h>
 #else
+#include <p8est_extended.h>
 #include <p8est_search.h>
 #endif
 
@@ -38,6 +40,8 @@ int
 main (int argc, char **argv)
 {
   int                 mpiret;
+  p4est_connectivity_t *conn;
+  p4est_t            *p4est;
 
   /* MPI initialization. */
   mpiret = sc_MPI_Init (&argc, &argv);
@@ -46,6 +50,22 @@ main (int argc, char **argv)
   /* Package init. */
   sc_init (sc_MPI_COMM_WORLD, 1, 1, NULL, SC_LP_DEFAULT);
   p4est_init (NULL, SC_LP_DEFAULT);
+
+  /* Create brick p4est. */
+  conn = p4est_connectivity_new_brick (2, 2,
+#ifdef P4_TO_P8
+                                       2,
+#endif
+                                       0, 0
+#ifdef P4_TO_P8
+                                       , 0
+#endif
+    );
+  p4est = p4est_new_ext (sc_MPI_COMM_WORLD, conn, 0, 3, 1, 0, NULL, NULL);
+
+  /* Free memory. */
+  p4est_destroy (p4est);
+  p4est_connectivity_destroy (conn);
 
   /* Close MPI environment. */
   sc_finalize ();
