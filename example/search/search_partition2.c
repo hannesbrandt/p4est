@@ -305,11 +305,37 @@ partition_callback (p4est_t *p4est, p4est_topidx_t which_tree,
 static void
 search_partition (search_partition_global_t *g)
 {
+  size_t              ir;
+  int                 l, buffer_size;
+
   /* search queries locally */
   g->num_queries_per_rank =
     sc_array_new_count (sizeof (size_t), g->p4est->mpisize);
   sc_array_memset (g->num_queries_per_rank, 0);
   p4est_search_partition (g->p4est, 0, NULL, partition_callback, g->queries);
+
+  /* output query points found per buffer */
+  buffer_size = 0;
+  for (ir = 0; ir < g->num_queries_per_rank->elem_count; ir++) {
+    if (ir % 10 == 0) {
+      buffer_size += 1;
+    }
+    buffer_size +=
+      snprintf (NULL, 0, "%7ld ",
+                *(size_t *) sc_array_index (g->num_queries_per_rank, ir));
+  }
+  char                buffer[buffer_size];
+  l = 0;
+  for (ir = 0; ir < g->num_queries_per_rank->elem_count; ir++) {
+    if (ir % 10 == 0) {
+      l += snprintf (buffer + l, buffer_size - l, "\n");
+    }
+    l +=
+      snprintf (buffer + l, buffer_size - l, "%7ld ",
+                *(size_t *) sc_array_index (g->num_queries_per_rank, ir));
+  }
+  P4EST_GLOBAL_INFOF
+    ("Partition search found the following query counts %s\n", buffer);
 }
 
 static void
