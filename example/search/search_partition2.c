@@ -48,6 +48,7 @@ typedef struct search_partition_global
   double              a[3], b[3], c[3]; /* refinement centers */
   int                 uniform_level;    /* level of initial uniform refinement */
   int                 max_level;        /* maximum level of adaptive refinement */
+  p4est_connectivity_t *conn;   /* brick connectivity of the mesh */
   p4est_t            *p4est;    /* the resulting p4est */
 
   /* query points */
@@ -130,6 +131,28 @@ refine_fn (p4est_t *p4est, p4est_topidx_t which_tree,
   return (quadrant->level <
           g->max_level -
           floor (min_dist * (g->max_level - g->uniform_level) / 0.2));
+}
+
+static void
+create_p4est (search_partition_global_t *g)
+{
+  /* Create brick p4est. */
+  g->conn = p4est_connectivity_new_brick (2, 2,
+#ifdef P4_TO_P8
+                                          2,
+#endif
+                                          0, 0
+#ifdef P4_TO_P8
+                                          , 0
+#endif
+    );
+  g->p4est =
+    p4est_new_ext (sc_MPI_COMM_WORLD, g->conn, 0, g->uniform_level, 1, 0,
+                   NULL, g);
+
+  /* refine the forest adaptively around two points g->a and g->b */
+  p4est_refine (g->p4est, 1, refine_fn, NULL);
+  p4est_partition (g->p4est, 0, NULL);
 }
 
 static void
@@ -386,29 +409,23 @@ write_vtk (search_partition_global_t *g)
 }
 
 static void
+cleanup (search_partition_global_t *g)
+{
+  sc_array_destroy (g->queries);
+  sc_array_destroy (g->global_nlq);
+  sc_array_destroy (g->num_queries_per_quad);
+  sc_array_destroy (g->num_queries_per_rank);
+  p4est_destroy (g->p4est);
+  p4est_connectivity_destroy (g->conn);
+}
+
+static void
 run (search_partition_global_t *g)
 {
-  p4est_connectivity_t *conn;
+  /* create a 2x2(x2) brick p4est mesh covering the unit square */
+  create_p4est (g);
 
-  /* Create brick p4est. */
-  conn = p4est_connectivity_new_brick (2, 2,
-#ifdef P4_TO_P8
-                                       2,
-#endif
-                                       0, 0
-#ifdef P4_TO_P8
-                                       , 0
-#endif
-    );
-  g->p4est =
-    p4est_new_ext (sc_MPI_COMM_WORLD, conn, 0, g->uniform_level, 1, 0, NULL,
-                   g);
-
-  /* refine the forest adaptively around two points g->a and g->b */
-  p4est_refine (g->p4est, 1, refine_fn, NULL);
-  p4est_partition (g->p4est, 0, NULL);
-
-  /* generate search queries */
+  /* generate search queries in the unit square */
   generate_queries (g);
 
   /* search queries in the local part of the mesh */
@@ -421,12 +438,7 @@ run (search_partition_global_t *g)
   write_vtk (g);
 
   /* Free memory. */
-  sc_array_destroy (g->queries);
-  sc_array_destroy (g->global_nlq);
-  sc_array_destroy (g->num_queries_per_quad);
-  sc_array_destroy (g->num_queries_per_rank);
-  p4est_destroy (g->p4est);
-  p4est_connectivity_destroy (conn);
+  cleanup (g);
 }
 
 int
