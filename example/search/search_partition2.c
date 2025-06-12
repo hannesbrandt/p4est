@@ -44,9 +44,14 @@
 /* define centers of refinement and point creation */
 typedef struct search_partition_global
 {
-  double              a[3], b[3], c[3];
-  int                 uniform_level;
-  int                 max_level;
+  /* p4est mesh */
+  double              a[3], b[3], c[3]; /* refinement centers */
+  int                 uniform_level;    /* level of initial uniform refinement */
+  int                 max_level;        /* maximum level of adaptive refinement */
+  p4est_t            *p4est;    /* the resulting p4est */
+
+  /* query points */
+  size_t              num_queries;      /* number of queries created on each process */
   sc_array_t         *queries;  /* array of query points */
 }
 search_partition_global_t;
@@ -110,14 +115,17 @@ generate_points (search_partition_global_t *g)
   int                 id;
   search_point_t     *sp;
   double              t;
+  sc_array_t         *local_queries;
 
-  g->queries = sc_array_new_count (sizeof (search_point_t), 1000);
-  sc_array_memset (g->queries, 0);
-
-  nqh = g->queries->elem_count / 2;
-  srand (0);
-  for (iq = 0; iq < g->queries->elem_count; iq++) {
-    sp = (search_point_t *) sc_array_index (g->queries, iq);
+  /* generate local queries */
+  local_queries =
+    sc_array_new_count (sizeof (search_point_t), g->num_queries);
+  sc_array_memset (local_queries, 0);
+  nqh = local_queries->elem_count / 2;
+  /* vary seeds between processes to get reproducible variety in points */
+  srand (1000 * g->p4est->mpirank);
+  for (iq = 0; iq < local_queries->elem_count; iq++) {
+    sp = (search_point_t *) sc_array_index (local_queries, iq);
     sp->is_local = -1;
     sp->rank = -1;
     for (id = 0; id < P4EST_DIM; id++) {
@@ -127,7 +135,7 @@ generate_points (search_partition_global_t *g)
     /* move point closer to g->b or g->c depending on iq and random t */
     t = pow ((double) rand () / RAND_MAX, 3);
     /* move the point to position sp->xyz * t + (1 - t) * {g->b,g->c} */
-    if (iq <= nqh) {
+    if (iq < nqh) {
       sp->xyz[0] = t * sp->xyz[0] + (1 - t) * g->b[0];
       sp->xyz[1] = t * sp->xyz[1] + (1 - t) * g->b[1];
       sp->xyz[2] = t * sp->xyz[2] + (1 - t) * g->b[2];
@@ -138,13 +146,26 @@ generate_points (search_partition_global_t *g)
       sp->xyz[2] = t * sp->xyz[2] + (1 - t) * g->c[2];
     }
   }
+
+  /* gather global queries on all processes */
+  g->queries =
+    sc_array_new_count (sizeof (search_point_t),
+                        g->p4est->mpisize * g->num_queries);
+  sc_array_memset (g->queries, 0);
+  sc_MPI_Allgather (local_queries->array,
+                    g->num_queries * sizeof (search_point_t), sc_MPI_BYTE,
+                    g->queries->array,
+                    g->num_queries * sizeof (search_point_t), sc_MPI_BYTE,
+                    g->p4est->mpicomm);
+
+  /* cleanup */
+  sc_array_destroy (local_queries);
 }
 
 static void
 run (search_partition_global_t *g)
 {
   p4est_connectivity_t *conn;
-  p4est_t            *p4est;
 
   /* Create brick p4est. */
   conn = p4est_connectivity_new_brick (2, 2,
@@ -156,19 +177,19 @@ run (search_partition_global_t *g)
                                        , 0
 #endif
     );
-  p4est =
+  g->p4est =
     p4est_new_ext (sc_MPI_COMM_WORLD, conn, 0, g->uniform_level, 1, 0, NULL,
                    g);
 
   /* refine the forest adaptively around two points g->a and g->b */
-  p4est_refine (p4est, 1, refine_fn, NULL);
-  p4est_partition (p4est, 0, NULL);
+  p4est_refine (g->p4est, 1, refine_fn, NULL);
+  p4est_partition (g->p4est, 0, NULL);
 
   /* generate search points */
   generate_points (g);
 
   /* output forest to vtk */
-  p4est_vtk_write_file (p4est, NULL,
+  p4est_vtk_write_file (g->p4est, NULL,
 #ifndef P4_TO_P8
                         "search_partition2"
 #else
@@ -178,7 +199,7 @@ run (search_partition_global_t *g)
 
   /* Free memory. */
   sc_array_destroy (g->queries);
-  p4est_destroy (p4est);
+  p4est_destroy (g->p4est);
   p4est_connectivity_destroy (conn);
 }
 
@@ -203,6 +224,8 @@ main (int argc, char **argv)
                       "Level of uniform refinement");
   sc_options_add_int (opt, 'm', "max_level", &g->max_level, 7,
                       "Level of maximum refinement");
+  sc_options_add_size_t (opt, 'q', "num_queries", &g->num_queries, 100,
+                         "Number of queries created per process");
 
   /* proceed in run-once loop for clean abort */
   ue = 0;
@@ -223,7 +246,7 @@ main (int argc, char **argv)
       ue = 1;
     }
     if (g->max_level < 0 || g->max_level > P4EST_QMAXLEVEL) {
-      P4EST_GLOBAL_LERRORF ("Maximum Level out of bounds 0..%d\n",
+      P4EST_GLOBAL_LERRORF ("Maximum level out of bounds 0..%d\n",
                             P4EST_QMAXLEVEL);
       ue = 1;
     }
