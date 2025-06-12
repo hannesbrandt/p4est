@@ -53,6 +53,7 @@ typedef struct search_partition_global
   /* query points */
   size_t              num_queries;      /* number of queries created on each process */
   int                 seed;     /* seed for random query creation */
+  double              clustering_exponent;      /* affects the distribution of queries */
   sc_array_t         *queries;  /* array of query points */
 
   /* search statistics */
@@ -155,7 +156,7 @@ generate_queries (search_partition_global_t *g)
     }
 
     /* move point closer to g->b or g->c depending on iq and random t */
-    t = pow ((double) rand () / RAND_MAX, 3);
+    t = pow ((double) rand () / RAND_MAX, g->clustering_exponent);
     /* move the point to position sp->xyz * t + (1 - t) * {g->b,g->c} */
     if (iq < nqh) {
       q->xyz[0] = t * q->xyz[0] + (1 - t) * g->b[0];
@@ -278,9 +279,9 @@ write_vtk (search_partition_global_t *g)
   cont = NULL;
   do {
     /* open files for output */
-    snprintf (filename, BUFSIZ, "search_partition%d_%d_%d_%ld_%d",
+    snprintf (filename, BUFSIZ, "search_partition%d_%d_%d_%ld_%d_%.2f",
               P4EST_DIM, g->uniform_level, g->max_level, g->num_queries,
-              g->seed);
+              g->seed, g->clustering_exponent);
     cont = p4est_vtk_context_new (g->p4est, filename);
     if (NULL == p4est_vtk_write_header (cont)) {
       P4EST_LERRORF ("Failed to write header for %s\n", filename);
@@ -371,6 +372,9 @@ main (int argc, char **argv)
                       "Seed for random queries");
   sc_options_add_bool (opt, 'v', "write_vtk", &g->write_vtk, 1,
                        "Activate vtk output");
+  sc_options_add_double (opt, 'c', "clustering_exponent",
+                         &g->clustering_exponent, 0.5,
+                         "Clustering of queries");
 
   /* proceed in run-once loop for clean abort */
   ue = 0;
@@ -399,6 +403,10 @@ main (int argc, char **argv)
       P4EST_GLOBAL_LERROR ("Seed has to be non-negative.\n");
       ue = 1;
     }
+    if (g->clustering_exponent < 0.) {
+      P4EST_GLOBAL_LERROR ("Clustering exponent has to be non-negative.\n");
+      ue = 1;
+    }
     if (ue) {
       break;
     }
@@ -411,7 +419,7 @@ main (int argc, char **argv)
     g->b[1] = 0.55;
     g->b[2] = 0.55;
     g->c[0] = 0.3;
-    g->c[1] = 0.6;
+    g->c[1] = 0.8;
     g->c[2] = 0.8;
 #ifndef P4_TO_P8
     g->a[2] = g->b[2] = g->c[2] = 0.;   /* reset z-coordinate to 0 */
