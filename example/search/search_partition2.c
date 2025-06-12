@@ -257,24 +257,15 @@ main (int argc, char **argv)
     /* define centers of refinement and point creation */
     g->a[0] = 0.2;
     g->a[1] = 0.4;
-#ifndef P4_TO_P8
-    g->a[2] = 0.;
-#else
     g->a[2] = 0.4;
-#endif
     g->b[0] = 0.7;
     g->b[1] = 0.5;
-#ifndef P4_TO_P8
-    g->b[2] = 0.;
-#else
     g->b[2] = 0.5;
-#endif
     g->c[0] = 0.3;
     g->c[1] = 0.6;
-#ifndef P4_TO_P8
-    g->c[2] = 0.;
-#else
     g->c[2] = 0.8;
+#ifndef P4_TO_P8
+    g->a[2] = g->b[2] = g->c[2] = 0.;   /* reset z-coordinate to 0 */
 #endif
 
     /* run example */
