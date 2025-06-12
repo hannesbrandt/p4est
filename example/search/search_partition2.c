@@ -52,6 +52,7 @@ typedef struct search_partition_global
 
   /* query points */
   size_t              num_queries;      /* number of queries created on each process */
+  int                 seed;     /* seed for random query creation */
   sc_array_t         *queries;  /* array of query points */
 }
 search_partition_global_t;
@@ -123,7 +124,7 @@ generate_points (search_partition_global_t *g)
   sc_array_memset (local_queries, 0);
   nqh = local_queries->elem_count / 2;
   /* vary seeds between processes to get reproducible variety in points */
-  srand (1000 * g->p4est->mpirank);
+  srand (g->seed + 1000 * g->p4est->mpirank);
   for (iq = 0; iq < local_queries->elem_count; iq++) {
     sp = (search_point_t *) sc_array_index (local_queries, iq);
     sp->is_local = -1;
@@ -226,6 +227,8 @@ main (int argc, char **argv)
                       "Level of maximum refinement");
   sc_options_add_size_t (opt, 'q', "num_queries", &g->num_queries, 100,
                          "Number of queries created per process");
+  sc_options_add_int (opt, 's', "seed", &g->seed, 0,
+                      "Seed for random queries");
 
   /* proceed in run-once loop for clean abort */
   ue = 0;
@@ -248,6 +251,10 @@ main (int argc, char **argv)
     if (g->max_level < 0 || g->max_level > P4EST_QMAXLEVEL) {
       P4EST_GLOBAL_LERRORF ("Maximum level out of bounds 0..%d\n",
                             P4EST_QMAXLEVEL);
+      ue = 1;
+    }
+    if (g->seed < 0) {
+      P4EST_GLOBAL_LERROR ("Seed has to be non-negative.\n");
       ue = 1;
     }
     if (ue) {
