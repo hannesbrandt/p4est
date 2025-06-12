@@ -308,13 +308,13 @@ search_partition (search_partition_global_t *g)
   size_t              ir;
   int                 l, buffer_size;
 
-  /* search queries locally */
+  /* search queries in the partition */
   g->num_queries_per_rank =
     sc_array_new_count (sizeof (size_t), g->p4est->mpisize);
   sc_array_memset (g->num_queries_per_rank, 0);
   p4est_search_partition (g->p4est, 0, NULL, partition_callback, g->queries);
 
-  /* output query points found per buffer */
+  /* output query points found per rank */
   buffer_size = 0;
   for (ir = 0; ir < g->num_queries_per_rank->elem_count; ir++) {
     if (ir % 10 == 0) {
@@ -336,6 +336,12 @@ search_partition (search_partition_global_t *g)
   }
   P4EST_GLOBAL_INFOF
     ("Partition search found the following query counts %s\n", buffer);
+
+  /* check results for consistency */
+  for (ir = 0; ir < g->num_queries_per_rank->elem_count; ir++) {
+    P4EST_ASSERT (*(size_t *) sc_array_index (g->num_queries_per_rank, ir) ==
+                  *(size_t *) sc_array_index (g->global_nlq, ir));
+  }
 }
 
 static void
