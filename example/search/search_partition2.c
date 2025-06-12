@@ -58,6 +58,10 @@ typedef struct search_partition_global
   /* search statistics */
   size_t              num_local_queries;        /* queries found in local search */
   sc_array_t         *global_nlq;       /* num_local_queries gathered globally */
+
+  /* vtk output */
+  int                 write_vtk;        /* boolean to activate vtk output */
+  sc_array_t         *num_queries_per_quad;     /* queries found in each local quad */
 }
 search_partition_global_t;
 
@@ -220,6 +224,8 @@ local_callback (p4est_t *p4est, p4est_topidx_t which_tree,
     /* we are on a local leaf */
     q->is_local = 1;
     g->num_local_queries++;
+    *(double *) sc_array_index (g->num_queries_per_quad,
+                                (size_t) local_num) += 1.;
   }
 
   return 1;
@@ -233,6 +239,9 @@ search_local (search_partition_global_t *g)
 
   /* search queries locally */
   g->num_local_queries = 0;
+  g->num_queries_per_quad =
+    sc_array_new_count (sizeof (double), g->p4est->local_num_quadrants);
+  sc_array_memset (g->num_queries_per_quad, 0);
   p4est_search_local (g->p4est, 0, NULL, local_callback, g->queries);
   P4EST_INFOF ("Queries found in local search = %ld\n", g->num_local_queries);
 
@@ -252,6 +261,47 @@ search_local (search_partition_global_t *g)
      gnq, g->queries->elem_count);
   P4EST_ASSERT (g->queries->elem_count <= (size_t) gnq);
   P4EST_FREE (glnq);
+}
+
+static void
+write_vtk (search_partition_global_t *g)
+{
+  char                filename[BUFSIZ];
+  p4est_vtk_context_t *cont;
+
+  /* write VTK output of sphere counts */
+  if (!g->write_vtk) {
+    return;
+  }
+
+  /* run-once loop for clean return */
+  cont = NULL;
+  do {
+    /* open files for output */
+    snprintf (filename, BUFSIZ, "search_partition%d_%d_%d_%ld_%d",
+              P4EST_DIM, g->uniform_level, g->max_level, g->num_queries,
+              g->seed);
+    cont = p4est_vtk_context_new (g->p4est, filename);
+    if (NULL == p4est_vtk_write_header (cont)) {
+      P4EST_LERRORF ("Failed to write header for %s\n", filename);
+      break;
+    }
+
+    /* write cell data to file */
+    if (NULL == p4est_vtk_write_cell_dataf
+        (cont, 1, 1, 1, 0, 1, 0, "num_queries", g->num_queries_per_quad,
+         cont)) {
+      P4EST_LERRORF ("Failed to write cell data for %s\n", filename);
+      break;
+    }
+
+    /* finish meta information and close files */
+    if (p4est_vtk_write_footer (cont)) {
+      P4EST_LERRORF ("Failed to write footer for %s\n", filename);
+      break;
+    }
+  }
+  while (0);
 }
 
 static void
@@ -284,17 +334,12 @@ run (search_partition_global_t *g)
   search_local (g);
 
   /* output forest to vtk */
-  p4est_vtk_write_file (g->p4est, NULL,
-#ifndef P4_TO_P8
-                        "search_partition2"
-#else
-                        "search_partition3"
-#endif
-    );
+  write_vtk (g);
 
   /* Free memory. */
   sc_array_destroy (g->queries);
   sc_array_destroy (g->global_nlq);
+  sc_array_destroy (g->num_queries_per_quad);
   p4est_destroy (g->p4est);
   p4est_connectivity_destroy (conn);
 }
@@ -324,6 +369,8 @@ main (int argc, char **argv)
                          "Number of queries created per process");
   sc_options_add_int (opt, 's', "seed", &g->seed, 0,
                       "Seed for random queries");
+  sc_options_add_bool (opt, 'v', "write_vtk", &g->write_vtk, 1,
+                       "Activate vtk output");
 
   /* proceed in run-once loop for clean abort */
   ue = 0;
