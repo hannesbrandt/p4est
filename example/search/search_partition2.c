@@ -58,6 +58,7 @@ typedef struct search_partition_global
 
   /* search statistics */
   size_t              num_local_queries;        /* queries found in local search */
+  sc_array_t         *num_queries_per_rank;     /* queries found in partition search */
   sc_array_t         *global_nlq;       /* num_local_queries gathered globally */
 
   /* vtk output */
@@ -149,7 +150,7 @@ generate_queries (search_partition_global_t *g)
   srand (g->seed + 1000 * g->p4est->mpirank);
   for (iq = 0; iq < local_queries->elem_count; iq++) {
     q = (search_query_t *) sc_array_index (local_queries, iq);
-    q->is_local = -1;
+    q->is_local = 0;
     q->rank = -1;
     for (id = 0; id < P4EST_DIM; id++) {
       q->xyz[id] = (double) rand () / RAND_MAX;
@@ -188,20 +189,12 @@ generate_queries (search_partition_global_t *g)
 }
 
 static int
-local_callback (p4est_t *p4est, p4est_topidx_t which_tree,
-                p4est_quadrant_t *quadrant, p4est_locidx_t local_num,
-                void *point)
+quadrant_contains_query (p4est_quadrant_t *quadrant,
+                         p4est_topidx_t which_tree, search_query_t *q)
 {
   double              qxyz[3];
   double              qlen;
   double              tol;
-
-  P4EST_ASSERT (point != NULL);
-  search_query_t     *q = (search_query_t *) point;
-  P4EST_ASSERT (p4est != NULL);
-  P4EST_ASSERT (p4est->user_pointer != NULL);
-  search_partition_global_t *g =
-    (search_partition_global_t *) p4est->user_pointer;
 
   /* compute lower, left corners coords for quadrant bounds */
   map_coordinates (quadrant->x, quadrant->y,
@@ -218,6 +211,24 @@ local_callback (p4est_t *p4est, p4est_topidx_t which_tree,
   if (q->xyz[0] < qxyz[0] - tol || q->xyz[0] > qxyz[0] + qlen + tol ||
       q->xyz[1] < qxyz[1] - tol || q->xyz[1] > qxyz[1] + qlen + tol ||
       q->xyz[2] < qxyz[2] - tol || q->xyz[2] > qxyz[2] + qlen + tol) {
+    return 0;
+  }
+  return 1;
+}
+
+static int
+local_callback (p4est_t *p4est, p4est_topidx_t which_tree,
+                p4est_quadrant_t *quadrant, p4est_locidx_t local_num,
+                void *point)
+{
+  P4EST_ASSERT (point != NULL);
+  search_query_t     *q = (search_query_t *) point;
+  P4EST_ASSERT (p4est != NULL);
+  P4EST_ASSERT (p4est->user_pointer != NULL);
+  search_partition_global_t *g =
+    (search_partition_global_t *) p4est->user_pointer;
+
+  if (!quadrant_contains_query (quadrant, which_tree, q)) {
     return 0;
   }
 
@@ -262,6 +273,43 @@ search_local (search_partition_global_t *g)
      gnq, g->queries->elem_count);
   P4EST_ASSERT (g->queries->elem_count <= (size_t) gnq);
   P4EST_FREE (glnq);
+}
+
+static int
+partition_callback (p4est_t *p4est, p4est_topidx_t which_tree,
+                    p4est_quadrant_t *quadrant, int pfirst, int plast,
+                    void *point)
+{
+  P4EST_ASSERT (point != NULL);
+  search_query_t     *q = (search_query_t *) point;
+  P4EST_ASSERT (p4est != NULL);
+  P4EST_ASSERT (p4est->user_pointer != NULL);
+  search_partition_global_t *g =
+    (search_partition_global_t *) p4est->user_pointer;
+
+  if (!quadrant_contains_query (quadrant, which_tree, q)) {
+    return 0;
+  }
+
+  if (pfirst == plast) {
+    /* we are on a local leaf */
+    q->rank = pfirst;
+    P4EST_ASSERT (((q->rank == p4est->mpirank) && q->is_local) ||
+                  ((q->rank != p4est->mpirank) && !q->is_local));
+    *(size_t *) sc_array_index (g->num_queries_per_rank, pfirst) += 1;
+  }
+
+  return 1;
+}
+
+static void
+search_partition (search_partition_global_t *g)
+{
+  /* search queries locally */
+  g->num_queries_per_rank =
+    sc_array_new_count (sizeof (size_t), g->p4est->mpisize);
+  sc_array_memset (g->num_queries_per_rank, 0);
+  p4est_search_partition (g->p4est, 0, NULL, partition_callback, g->queries);
 }
 
 static void
@@ -334,6 +382,9 @@ run (search_partition_global_t *g)
   /* search queries in the local part of the mesh */
   search_local (g);
 
+  /* search queries in the partition of the mesh and compare */
+  search_partition (g);
+
   /* output forest to vtk */
   write_vtk (g);
 
@@ -341,6 +392,7 @@ run (search_partition_global_t *g)
   sc_array_destroy (g->queries);
   sc_array_destroy (g->global_nlq);
   sc_array_destroy (g->num_queries_per_quad);
+  sc_array_destroy (g->num_queries_per_rank);
   p4est_destroy (g->p4est);
   p4est_connectivity_destroy (conn);
 }
