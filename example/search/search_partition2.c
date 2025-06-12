@@ -57,13 +57,13 @@ typedef struct search_partition_global
 }
 search_partition_global_t;
 
-typedef struct search_point
+typedef struct search_query
 {
   double              xyz[3];   /* 3D coordinates */
   int                 is_local; /* set to 1, if found in local search */
   int                 rank;     /* rank assigned during partition search */
 }
-search_point_t;
+search_query_t;
 
 static int
 refine_fn (p4est_t *p4est, p4est_topidx_t which_tree,
@@ -110,53 +110,53 @@ refine_fn (p4est_t *p4est, p4est_topidx_t which_tree,
 }
 
 static void
-generate_points (search_partition_global_t *g)
+generate_queries (search_partition_global_t *g)
 {
   size_t              iq, nqh;
   int                 id;
-  search_point_t     *sp;
+  search_query_t     *q;
   double              t;
   sc_array_t         *local_queries;
 
   /* generate local queries */
   local_queries =
-    sc_array_new_count (sizeof (search_point_t), g->num_queries);
+    sc_array_new_count (sizeof (search_query_t), g->num_queries);
   sc_array_memset (local_queries, 0);
   nqh = local_queries->elem_count / 2;
   /* vary seeds between processes to get reproducible variety in points */
   srand (g->seed + 1000 * g->p4est->mpirank);
   for (iq = 0; iq < local_queries->elem_count; iq++) {
-    sp = (search_point_t *) sc_array_index (local_queries, iq);
-    sp->is_local = -1;
-    sp->rank = -1;
+    q = (search_query_t *) sc_array_index (local_queries, iq);
+    q->is_local = -1;
+    q->rank = -1;
     for (id = 0; id < P4EST_DIM; id++) {
-      sp->xyz[id] = (double) rand () / RAND_MAX;
+      q->xyz[id] = (double) rand () / RAND_MAX;
     }
 
     /* move point closer to g->b or g->c depending on iq and random t */
     t = pow ((double) rand () / RAND_MAX, 3);
     /* move the point to position sp->xyz * t + (1 - t) * {g->b,g->c} */
     if (iq < nqh) {
-      sp->xyz[0] = t * sp->xyz[0] + (1 - t) * g->b[0];
-      sp->xyz[1] = t * sp->xyz[1] + (1 - t) * g->b[1];
-      sp->xyz[2] = t * sp->xyz[2] + (1 - t) * g->b[2];
+      q->xyz[0] = t * q->xyz[0] + (1 - t) * g->b[0];
+      q->xyz[1] = t * q->xyz[1] + (1 - t) * g->b[1];
+      q->xyz[2] = t * q->xyz[2] + (1 - t) * g->b[2];
     }
     else {
-      sp->xyz[0] = t * sp->xyz[0] + (1 - t) * g->c[0];
-      sp->xyz[1] = t * sp->xyz[1] + (1 - t) * g->c[1];
-      sp->xyz[2] = t * sp->xyz[2] + (1 - t) * g->c[2];
+      q->xyz[0] = t * q->xyz[0] + (1 - t) * g->c[0];
+      q->xyz[1] = t * q->xyz[1] + (1 - t) * g->c[1];
+      q->xyz[2] = t * q->xyz[2] + (1 - t) * g->c[2];
     }
   }
 
   /* gather global queries on all processes */
   g->queries =
-    sc_array_new_count (sizeof (search_point_t),
+    sc_array_new_count (sizeof (search_query_t),
                         g->p4est->mpisize * g->num_queries);
   sc_array_memset (g->queries, 0);
   sc_MPI_Allgather (local_queries->array,
-                    g->num_queries * sizeof (search_point_t), sc_MPI_BYTE,
+                    g->num_queries * sizeof (search_query_t), sc_MPI_BYTE,
                     g->queries->array,
-                    g->num_queries * sizeof (search_point_t), sc_MPI_BYTE,
+                    g->num_queries * sizeof (search_query_t), sc_MPI_BYTE,
                     g->p4est->mpicomm);
 
   /* cleanup */
@@ -186,8 +186,8 @@ run (search_partition_global_t *g)
   p4est_refine (g->p4est, 1, refine_fn, NULL);
   p4est_partition (g->p4est, 0, NULL);
 
-  /* generate search points */
-  generate_points (g);
+  /* generate search queries */
+  generate_queries (g);
 
   /* output forest to vtk */
   p4est_vtk_write_file (g->p4est, NULL,
