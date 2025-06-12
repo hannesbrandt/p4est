@@ -68,13 +68,13 @@ typedef struct search_partition_global
 }
 search_partition_global_t;
 
-typedef struct search_query
+typedef struct query_point
 {
   double              xyz[3];   /* 3D coordinates */
   int                 is_local; /* set to 1, if found in local search */
   int                 rank;     /* rank assigned during partition search */
 }
-search_query_t;
+query_point_t;
 
 static void
 map_coordinates (p4est_qcoord_t x, p4est_qcoord_t y, p4est_qcoord_t z,
@@ -160,49 +160,48 @@ generate_queries (search_partition_global_t *g)
 {
   size_t              iq, nqh;
   int                 id;
-  search_query_t     *q;
+  query_point_t      *p;
   double              t;
   sc_array_t         *local_queries;
 
   /* generate local queries */
-  local_queries =
-    sc_array_new_count (sizeof (search_query_t), g->num_queries);
+  local_queries = sc_array_new_count (sizeof (query_point_t), g->num_queries);
   sc_array_memset (local_queries, 0);
   nqh = local_queries->elem_count / 2;
   /* vary seeds between processes to get reproducible variety in points */
   srand (g->seed + 1000 * g->p4est->mpirank);
   for (iq = 0; iq < local_queries->elem_count; iq++) {
-    q = (search_query_t *) sc_array_index (local_queries, iq);
-    q->is_local = 0;
-    q->rank = -1;
+    p = (query_point_t *) sc_array_index (local_queries, iq);
+    p->is_local = 0;
+    p->rank = -1;
     for (id = 0; id < P4EST_DIM; id++) {
-      q->xyz[id] = (double) rand () / RAND_MAX;
+      p->xyz[id] = (double) rand () / RAND_MAX;
     }
 
     /* move point closer to g->b or g->c depending on iq and random t */
     t = pow ((double) rand () / RAND_MAX, g->clustering_exponent);
     /* move the point to position sp->xyz * t + (1 - t) * {g->b,g->c} */
     if (iq < nqh) {
-      q->xyz[0] = t * q->xyz[0] + (1 - t) * g->b[0];
-      q->xyz[1] = t * q->xyz[1] + (1 - t) * g->b[1];
-      q->xyz[2] = t * q->xyz[2] + (1 - t) * g->b[2];
+      p->xyz[0] = t * p->xyz[0] + (1 - t) * g->b[0];
+      p->xyz[1] = t * p->xyz[1] + (1 - t) * g->b[1];
+      p->xyz[2] = t * p->xyz[2] + (1 - t) * g->b[2];
     }
     else {
-      q->xyz[0] = t * q->xyz[0] + (1 - t) * g->c[0];
-      q->xyz[1] = t * q->xyz[1] + (1 - t) * g->c[1];
-      q->xyz[2] = t * q->xyz[2] + (1 - t) * g->c[2];
+      p->xyz[0] = t * p->xyz[0] + (1 - t) * g->c[0];
+      p->xyz[1] = t * p->xyz[1] + (1 - t) * g->c[1];
+      p->xyz[2] = t * p->xyz[2] + (1 - t) * g->c[2];
     }
   }
 
   /* gather global queries on all processes */
   g->queries =
-    sc_array_new_count (sizeof (search_query_t),
+    sc_array_new_count (sizeof (query_point_t),
                         g->p4est->mpisize * g->num_queries);
   sc_array_memset (g->queries, 0);
   sc_MPI_Allgather (local_queries->array,
-                    g->num_queries * sizeof (search_query_t), sc_MPI_BYTE,
+                    g->num_queries * sizeof (query_point_t), sc_MPI_BYTE,
                     g->queries->array,
-                    g->num_queries * sizeof (search_query_t), sc_MPI_BYTE,
+                    g->num_queries * sizeof (query_point_t), sc_MPI_BYTE,
                     g->p4est->mpicomm);
   P4EST_GLOBAL_INFOF ("Created %ld global queries.\n",
                       g->queries->elem_count);
@@ -213,7 +212,7 @@ generate_queries (search_partition_global_t *g)
 
 static int
 quadrant_contains_query (p4est_quadrant_t *quadrant,
-                         p4est_topidx_t which_tree, search_query_t *q)
+                         p4est_topidx_t which_tree, query_point_t *p)
 {
   double              qxyz[3];
   double              qlen;
@@ -231,9 +230,9 @@ quadrant_contains_query (p4est_quadrant_t *quadrant,
 
   /* check if query is contained in quadrant */
   tol = 1e-14;
-  if (q->xyz[0] < qxyz[0] - tol || q->xyz[0] > qxyz[0] + qlen + tol ||
-      q->xyz[1] < qxyz[1] - tol || q->xyz[1] > qxyz[1] + qlen + tol ||
-      q->xyz[2] < qxyz[2] - tol || q->xyz[2] > qxyz[2] + qlen + tol) {
+  if (p->xyz[0] < qxyz[0] - tol || p->xyz[0] > qxyz[0] + qlen + tol ||
+      p->xyz[1] < qxyz[1] - tol || p->xyz[1] > qxyz[1] + qlen + tol ||
+      p->xyz[2] < qxyz[2] - tol || p->xyz[2] > qxyz[2] + qlen + tol) {
     return 0;
   }
   return 1;
@@ -245,19 +244,19 @@ local_callback (p4est_t *p4est, p4est_topidx_t which_tree,
                 void *point)
 {
   P4EST_ASSERT (point != NULL);
-  search_query_t     *q = (search_query_t *) point;
+  query_point_t      *p = (query_point_t *) point;
   P4EST_ASSERT (p4est != NULL);
   P4EST_ASSERT (p4est->user_pointer != NULL);
   search_partition_global_t *g =
     (search_partition_global_t *) p4est->user_pointer;
 
-  if (!quadrant_contains_query (quadrant, which_tree, q)) {
+  if (!quadrant_contains_query (quadrant, which_tree, p)) {
     return 0;
   }
 
   if (local_num >= 0) {
     /* we are on a local leaf */
-    q->is_local = 1;
+    p->is_local = 1;
     g->num_local_queries++;
     *(double *) sc_array_index (g->num_queries_per_quad,
                                 (size_t) local_num) += 1.;
@@ -304,21 +303,21 @@ partition_callback (p4est_t *p4est, p4est_topidx_t which_tree,
                     void *point)
 {
   P4EST_ASSERT (point != NULL);
-  search_query_t     *q = (search_query_t *) point;
+  query_point_t      *p = (query_point_t *) point;
   P4EST_ASSERT (p4est != NULL);
   P4EST_ASSERT (p4est->user_pointer != NULL);
   search_partition_global_t *g =
     (search_partition_global_t *) p4est->user_pointer;
 
-  if (!quadrant_contains_query (quadrant, which_tree, q)) {
+  if (!quadrant_contains_query (quadrant, which_tree, p)) {
     return 0;
   }
 
   if (pfirst == plast) {
     /* we are on a local leaf */
-    q->rank = pfirst;
-    P4EST_ASSERT (((q->rank == p4est->mpirank) && q->is_local) ||
-                  ((q->rank != p4est->mpirank) && !q->is_local));
+    p->rank = pfirst;
+    P4EST_ASSERT (((p->rank == p4est->mpirank) && p->is_local) ||
+                  ((p->rank != p4est->mpirank) && !p->is_local));
     *(size_t *) sc_array_index (g->num_queries_per_rank, pfirst) += 1;
   }
 
