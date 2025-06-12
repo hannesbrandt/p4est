@@ -54,6 +54,10 @@ typedef struct search_partition_global
   size_t              num_queries;      /* number of queries created on each process */
   int                 seed;     /* seed for random query creation */
   sc_array_t         *queries;  /* array of query points */
+
+  /* search statistics */
+  size_t              num_local_queries;        /* queries found in local search */
+  sc_array_t         *global_nlq;       /* num_local_queries gathered globally */
 }
 search_partition_global_t;
 
@@ -64,6 +68,20 @@ typedef struct search_query
   int                 rank;     /* rank assigned during partition search */
 }
 search_query_t;
+
+static void
+map_coordinates (p4est_qcoord_t x, p4est_qcoord_t y, p4est_qcoord_t z,
+                 p4est_topidx_t which_tree, double *xyz)
+{
+  P4EST_ASSERT (which_tree < P4EST_CHILDREN);   /* assert we have a 2x2(x2) brick */
+  xyz[0] = 0.5 * (COORDINATE_IROOTLEN * x + which_tree % 2);
+  xyz[1] = 0.5 * (COORDINATE_IROOTLEN * y + (which_tree / 2) % 2);
+#ifndef P4_TO_P8
+  xyz[2] = 0.;
+#else
+  xyz[2] = 0.5 * (COORDINATE_IROOTLEN * z + which_tree / 4);
+#endif
+}
 
 static int
 refine_fn (p4est_t *p4est, p4est_topidx_t which_tree,
@@ -82,14 +100,13 @@ refine_fn (p4est_t *p4est, p4est_topidx_t which_tree,
   /* get quadrant center reference coordinates in the unit square */
   P4EST_ASSERT (which_tree < P4EST_CHILDREN);   /* assert we have a 2x2(x2) brick */
   h2 = P4EST_QUADRANT_LEN (quadrant->level) >> 1;
-  xyz[0] = 0.5 * (COORDINATE_IROOTLEN * (quadrant->x + h2) + which_tree % 2);
-  xyz[1] =
-    0.5 * (COORDINATE_IROOTLEN * (quadrant->y + h2) + (which_tree / 2) % 2);
+  map_coordinates (quadrant->x + h2, quadrant->y + h2,
 #ifndef P4_TO_P8
-  xyz[2] = 0.;
+                   0,
 #else
-  xyz[2] = 0.5 * (COORDINATE_IROOTLEN * (quadrant->z + h2) + which_tree / 4);
+                   quadrant->z + h2,
 #endif
+                   which_tree, xyz);
 
   /* compute distance to point a */
   dist = (g->a[0] - xyz[0]) * (g->a[0] - xyz[0]) +
@@ -158,9 +175,83 @@ generate_queries (search_partition_global_t *g)
                     g->queries->array,
                     g->num_queries * sizeof (search_query_t), sc_MPI_BYTE,
                     g->p4est->mpicomm);
+  P4EST_GLOBAL_INFOF ("Created %ld global queries.\n",
+                      g->queries->elem_count);
 
   /* cleanup */
   sc_array_destroy (local_queries);
+}
+
+static int
+local_callback (p4est_t *p4est, p4est_topidx_t which_tree,
+                p4est_quadrant_t *quadrant, p4est_locidx_t local_num,
+                void *point)
+{
+  double              qxyz[3];
+  double              qlen;
+  double              tol;
+
+  P4EST_ASSERT (point != NULL);
+  search_query_t     *q = (search_query_t *) point;
+  P4EST_ASSERT (p4est != NULL);
+  P4EST_ASSERT (p4est->user_pointer != NULL);
+  search_partition_global_t *g =
+    (search_partition_global_t *) p4est->user_pointer;
+
+  /* compute lower, left corners coords for quadrant bounds */
+  map_coordinates (quadrant->x, quadrant->y,
+#ifndef P4_TO_P8
+                   0,
+#else
+                   quadrant->z,
+#endif
+                   which_tree, qxyz);
+  qlen = 0.5 * P4EST_QUADRANT_LEN (quadrant->level) * COORDINATE_IROOTLEN;
+
+  /* check if query is contained in quadrant */
+  tol = 1e-14;
+  if (q->xyz[0] < qxyz[0] - tol || q->xyz[0] > qxyz[0] + qlen + tol ||
+      q->xyz[1] < qxyz[1] - tol || q->xyz[1] > qxyz[1] + qlen + tol ||
+      q->xyz[2] < qxyz[2] - tol || q->xyz[2] > qxyz[2] + qlen + tol) {
+    return 0;
+  }
+
+  if (local_num >= 0) {
+    /* we are on a local leaf */
+    q->is_local = 1;
+    g->num_local_queries++;
+  }
+
+  return 1;
+}
+
+static void
+search_local (search_partition_global_t *g)
+{
+  long long           lnq, *glnq, gnq;
+  size_t              il;
+
+  /* search queries locally */
+  g->num_local_queries = 0;
+  p4est_search_local (g->p4est, 0, NULL, local_callback, g->queries);
+  P4EST_INFOF ("Queries found in local search = %ld\n", g->num_local_queries);
+
+  /* allgather local num queries for future comparison with partition search */
+  lnq = (long long) g->num_local_queries;
+  glnq = P4EST_ALLOC (long long, g->p4est->mpisize);
+  sc_MPI_Allgather (&lnq, 1, sc_MPI_LONG_LONG_INT, glnq, 1,
+                    sc_MPI_LONG_LONG_INT, g->p4est->mpicomm);
+  g->global_nlq = sc_array_new_count (sizeof (size_t), g->p4est->mpisize);
+  gnq = 0;
+  for (il = 0; il < g->global_nlq->elem_count; il++) {
+    gnq += glnq[il];
+    *(size_t *) sc_array_index (g->global_nlq, il) = glnq[il];
+  }
+  P4EST_GLOBAL_INFOF
+    ("Queries found globally during local search = %lld (expected %ld)\n",
+     gnq, g->queries->elem_count);
+  P4EST_ASSERT (g->queries->elem_count <= (size_t) gnq);
+  P4EST_FREE (glnq);
 }
 
 static void
@@ -189,6 +280,9 @@ run (search_partition_global_t *g)
   /* generate search queries */
   generate_queries (g);
 
+  /* search queries in the local part of the mesh */
+  search_local (g);
+
   /* output forest to vtk */
   p4est_vtk_write_file (g->p4est, NULL,
 #ifndef P4_TO_P8
@@ -200,6 +294,7 @@ run (search_partition_global_t *g)
 
   /* Free memory. */
   sc_array_destroy (g->queries);
+  sc_array_destroy (g->global_nlq);
   p4est_destroy (g->p4est);
   p4est_connectivity_destroy (conn);
 }
