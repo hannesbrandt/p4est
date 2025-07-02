@@ -22,39 +22,6 @@
   51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 */
 
-/** \file search_replicated2.c
- *
- * This 2D example program searches random points in the partition of a 2D
- * brick forest and verifies the results by comparing them to the local search.
- *
- * The query points are replicated on all processes.
- * First, they are entered into the local search and the amount of queries found
- * in the local part of the forest is stored for each process.
- * Next, the queries are entered into the partition search and the amount of
- * queries assigned to each process is compared to the results of the local
- * search, to check for consistency.
- *
- * The forest is a 2x2 brick covering the unit square. First, it is refined
- * uniformly to a user-specified level. Then, it is refined adaptively around
- * two refinement center points a and b.
- * The query points are created with a random distribution that clusters them
- * around the refinement point b and another point c.
- * As a result, both searches are tested for
- * - a fine mesh with few query points (point a)
- * - a fine mesh with many query points (point b)
- * - a coarse mesh with many query points (point c)
- * - a coarse mesh with few query points (else).
- * The adaptive refinement of the forest can be controlled by its maxlevel and
- * its level of uniform refinement. In particular, by choosing the maxlevel
- * small enough, a uniform p4est can be enforced.
- * Similarly, the query point creation can be controlled by the
- * "cluster_exponent" c.
- * Setting c to 0 leads to a uniform distribution. Higher values of c lead to
- * the query points increasingly clustering around point b and c.
- * To check the distribution, the vtk output of the uniform forest can be
- * checked for the amount of queries found in each quadrant.
- */
-
 #include <sc_options.h>
 #ifndef P4_TO_P8
 #include <p4est_extended.h>
