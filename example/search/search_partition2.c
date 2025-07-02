@@ -131,6 +131,8 @@ refine_fn (p4est_t *p4est, p4est_topidx_t which_tree,
     (search_partition_global_t *) p4est->user_pointer;
   P4EST_ASSERT (quadrant != NULL);
 
+  /* to do: use p4est_quadrant_volume_coordinates */
+
   /* get quadrant center reference coordinates in the unit square */
   P4EST_ASSERT (which_tree < P4EST_CHILDREN);   /* assert we have a 2x2(x2) brick */
   h2 = P4EST_QUADRANT_LEN (quadrant->level) >> 1;
@@ -177,6 +179,10 @@ create_p4est (search_partition_global_t *g)
     p4est_new_ext (sc_MPI_COMM_WORLD, g->conn, 0, g->uniform_level, 1, 0,
                    NULL, g);
 
+  /* to do: better make a loop of non-recursive refinement and partition.
+     even when there is no refinement at all, execute partition at least once:
+     this is necessary since p4est_new_ext does not partition for coarsening */
+
   /* refine the forest adaptively around two points g->a and g->b */
   p4est_refine (g->p4est, 1, refine_fn, NULL);
   p4est_partition (g->p4est, 0, NULL);
@@ -191,6 +197,9 @@ generate_queries (search_partition_global_t *g)
   double              t;
   sc_array_t         *local_queries;
 
+  /* to do: pass global number of queries on command line and
+     compute distributed count using p4est_partition_cut_gloidx () */
+
   /* generate local queries */
   local_queries = sc_array_new_count (sizeof (query_point_t), g->num_queries);
   sc_array_memset (local_queries, 0);
@@ -202,11 +211,11 @@ generate_queries (search_partition_global_t *g)
     p->is_local = 0;
     p->rank = -1;
     for (id = 0; id < P4EST_DIM; id++) {
-      p->xyz[id] = (double) rand () / RAND_MAX;
+      p->xyz[id] = rand () / (RAND_MAX + 1.);
     }
 
     /* move point closer to g->b or g->c depending on iq and random t */
-    t = pow ((double) rand () / RAND_MAX, g->clustering_exponent);
+    t = pow (rand () / (RAND_MAX + 1.), g->clustering_exponent);
     /* move the point to position sp->xyz * t + (1 - t) * {g->b,g->c} */
     if (iq < nqh) {
       p->xyz[0] = t * p->xyz[0] + (1 - t) * g->b[0];
@@ -232,6 +241,11 @@ generate_queries (search_partition_global_t *g)
                     g->p4est->mpicomm);
   P4EST_GLOBAL_INFOF ("Created %ld global queries.\n",
                       g->queries->elem_count);
+
+
+  /* to do: generate all points on process 0 for this example,
+     which is designed to verify global against local search.
+     make this exception to the rule very clear in the docs. */
 
   /* cleanup */
   sc_array_destroy (local_queries);
@@ -496,31 +510,32 @@ main (int argc, char **argv)
   p4est_init (NULL, SC_LP_DEFAULT);
 
   opt = sc_options_new (argv[0]);
-  sc_options_add_int (opt, 'u', "uniform_level", &g->uniform_level, 3,
+  sc_options_add_int (opt, 'l', "minlevel", &g->uniform_level, 3,
                       "Level of uniform refinement");
-  sc_options_add_int (opt, 'm', "max_level", &g->max_level, 7,
+  sc_options_add_int (opt, 'L', "maxlevel", &g->max_level, 7,
                       "Level of maximum refinement");
-  sc_options_add_size_t (opt, 'q', "num_queries", &g->num_queries, 100,
+  sc_options_add_size_t (opt, 'q', "num-queries", &g->num_queries, 100,
                          "Number of queries created per process");
   sc_options_add_int (opt, 's', "seed", &g->seed, 0,
                       "Seed for random queries");
-  sc_options_add_bool (opt, 'v', "write_vtk", &g->write_vtk, 1,
+  sc_options_add_bool (opt, 'v', "write-vtk", &g->write_vtk, 0,
                        "Activate vtk output");
-  sc_options_add_double (opt, 'c', "clustering_exponent",
+  sc_options_add_double (opt, 'c', "clustering-exponent",
                          &g->clustering_exponent, 0.5,
                          "Clustering of queries");
 
   /* proceed in run-once loop for clean abort */
   ue = 0;
   do {
-    first_argc = sc_options_parse (p4est_package_id, SC_LP_DEFAULT,
+    first_argc = sc_options_parse (p4est_get_package_id (), SC_LP_DEFAULT,
                                    opt, argc, argv);
     if (first_argc < 0) {
       P4EST_GLOBAL_LERROR ("Invalid option format.\n");
       ue = 1;
       break;
     }
-    sc_options_print_summary (p4est_package_id, SC_LP_ESSENTIAL, opt);
+    sc_options_print_summary (p4est_get_package_id (), SC_LP_ESSENTIAL,
+                              opt);
 
     /* check options for consistency */
     if (g->uniform_level < 0 || g->uniform_level > P4EST_QMAXLEVEL) {
@@ -564,7 +579,8 @@ main (int argc, char **argv)
   }
   while (0);
   if (ue) {
-    sc_options_print_usage (p4est_package_id, SC_LP_ERROR, opt, NULL);
+    sc_options_print_usage (p4est_get_package_id (), SC_LP_ERROR,
+                            opt, NULL);
   }
 
   /* Close MPI environment. */
@@ -573,5 +589,5 @@ main (int argc, char **argv)
   mpiret = sc_MPI_Finalize ();
   SC_CHECK_MPI (mpiret);
 
-  return EXIT_SUCCESS;
+  return ue ? EXIT_FAILURE : EXIT_SUCCESS;
 }
