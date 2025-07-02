@@ -22,11 +22,11 @@
   51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 */
 
-/** \file search_partition3.c
+/** \file search_replicated3.c
  *
  * This 3D example program searches random points in the partition of a 3D
  * brick forest and verifies the results by comparing them to the local search.
  */
 
 #include <p4est_to_p8est.h>
-#include "search_partition2.c"
+#include "search_replicated2.c"
