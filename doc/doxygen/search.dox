@@ -128,12 +128,24 @@
  * ## Examples using the search
  *
  * There are several examples in 2D and 3D using the search.
- * In \ref particles/particles2.c and \ref particles/particles3.c the query
- * points are proper points, which move through the domain and are tracked
- * through parallel distributed searches.
- * In \ref spheres/spheres2.c and \ref spheres/spheres3.c the query points
- * are spheres that match any quadrant intersecting their surface (but not
- * their interior).
+ *
+ * The examples \ref search/search_replicated2.c and
+ * \ref search/search_replicated3.c test the local search and the partition
+ * search routine for consistency.
+ * First, a set of random points is generated and replicated on all processes.
+ * While this approach is not scalable, it allows to compare the results from
+ * searching the points locally on each process with the results of a partition
+ * search of the same set of queries.
+ *
+ * The examples \ref particles/particles2.c and \ref particles/particles3.c
+ * use the partition and local search routine in a scalable particle
+ * tracking simulation. Here, the query points are proper points, which move
+ * through the domain and across process boundaries in an ever-adapting mesh.
+ *
+ * The examples \ref spheres/spheres2.c and \ref spheres/spheres3.c show how the
+ * search routines can be applied to queries with positive volumes; in this
+ * case, spheres. Here, a sphere matches any quadrant that intersects its
+ * surface.
  */
 
  /** \example spheres/spheres2.c
