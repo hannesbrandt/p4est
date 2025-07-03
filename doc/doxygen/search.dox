@@ -249,6 +249,7 @@
 * Usage: `p4est_search_replicated`
 * with the following options:
 * \verbatim
+*    -h | --help                  Print help message and exit cleanly
 *    -l | --minlevel  <INT>       Level of uniform refinement
 *    -L | --maxlevel  <INT>       Level of maximum refinement
 *    -q | --num-queries <SIZE_T>  Number of queries created per process
@@ -293,6 +294,7 @@
 * Usage: `p8est_search_replicated`
 * with the following options:
 * \verbatim
+*    -h | --help                  Print help message and exit cleanly
 *    -l | --minlevel  <INT>       Level of uniform refinement
 *    -L | --maxlevel  <INT>       Level of maximum refinement
 *    -q | --num-queries <SIZE_T>  Number of queries created per process

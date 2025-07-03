@@ -209,7 +209,6 @@ generate_queries (search_partition_global_t *g)
   P4EST_GLOBAL_INFOF ("Created %ld global queries.\n",
                       g->queries->elem_count);
 
-
   /* to do: generate all points on process 0 for this example,
      which is designed to verify global against local search.
      make this exception to the rule very clear in the docs. */
@@ -377,7 +376,8 @@ search_partition (search_partition_global_t *g)
     lenz += retb;
 
     /* compute total number of queries found during partition search */
-    num_queries_found += *(size_t *) sc_array_index (g->num_queries_per_rank, iz);
+    num_queries_found +=
+      *(size_t *) sc_array_index (g->num_queries_per_rank, iz);
   }
   P4EST_GLOBAL_PRODUCTIONF
     ("Queries found during partition search: %ld (expected %ld)\n",
@@ -474,7 +474,7 @@ main (int argc, char **argv)
 {
   int                 mpiret;
   sc_options_t       *opt;
-  int                 first_argc, ue;
+  int                 first_argc, ue, help;
   search_partition_global_t global, *g = &global;
 
   /* MPI initialization. */
@@ -483,12 +483,14 @@ main (int argc, char **argv)
 
   /* Package init. */
   sc_init (sc_MPI_COMM_WORLD, 1, 1, NULL, SC_LP_DEFAULT);
-  p4est_init (NULL, SC_LP_INFO);
+  p4est_init (NULL, SC_LP_DEFAULT);
 
   opt = sc_options_new (argv[0]);
+  sc_options_add_switch (opt, 'h', "help", &help,
+                         "Print help message and exit cleanly");
   sc_options_add_int (opt, 'l', "minlevel", &g->uniform_level, 3,
                       "Level of uniform refinement");
-  sc_options_add_int (opt, 'L', "maxlevel", &g->max_level, 7,
+  sc_options_add_int (opt, 'L', "maxlevel", &g->max_level, 5,
                       "Level of maximum refinement");
   sc_options_add_size_t (opt, 'q', "num-queries", &g->num_queries, 100,
                          "Number of queries created per process");
@@ -510,8 +512,6 @@ main (int argc, char **argv)
       ue = 1;
       break;
     }
-    sc_options_print_summary (p4est_get_package_id (), SC_LP_ESSENTIAL,
-                              opt);
 
     /* check options for consistency */
     if (g->uniform_level < 0 || g->uniform_level > P4EST_QMAXLEVEL) {
@@ -532,9 +532,10 @@ main (int argc, char **argv)
       P4EST_GLOBAL_LERROR ("Clustering exponent has to be non-negative.\n");
       ue = 1;
     }
-    if (ue) {
+    if (ue || help) {
       break;
     }
+    sc_options_print_summary (p4est_get_package_id (), SC_LP_ESSENTIAL, opt);
 
     /* define centers of refinement and point creation */
     g->a[0] = 0.2;
@@ -554,9 +555,8 @@ main (int argc, char **argv)
     run (g);
   }
   while (0);
-  if (ue) {
-    sc_options_print_usage (p4est_get_package_id (), SC_LP_ERROR,
-                            opt, NULL);
+  if (ue || help) {
+    sc_options_print_usage (p4est_get_package_id (), SC_LP_ERROR, opt, NULL);
   }
 
   /* Close MPI environment. */
