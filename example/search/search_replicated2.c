@@ -27,10 +27,12 @@
 #include <p4est_extended.h>
 #include <p4est_search.h>
 #include <p4est_vtk.h>
+#include <p4est_bits.h>
 #else
 #include <p8est_extended.h>
 #include <p8est_search.h>
 #include <p8est_vtk.h>
+#include <p8est_bits.h>
 #endif
 
 #define COORDINATE_IROOTLEN (1. / P4EST_ROOT_LEN)
@@ -88,7 +90,7 @@ static int
 refine_fn (p4est_t *p4est, p4est_topidx_t which_tree,
            p4est_quadrant_t *quadrant)
 {
-  p4est_qcoord_t      h2;
+  p4est_qcoord_t      coords[3];
   double              xyz[3];
   double              dist, min_dist;
 
@@ -98,16 +100,14 @@ refine_fn (p4est_t *p4est, p4est_topidx_t which_tree,
     (search_partition_global_t *) p4est->user_pointer;
   P4EST_ASSERT (quadrant != NULL);
 
-  /* to do: use p4est_quadrant_volume_coordinates */
-
   /* get quadrant center reference coordinates in the unit square */
   P4EST_ASSERT (which_tree < P4EST_CHILDREN);   /* assert we have a 2x2(x2) brick */
-  h2 = P4EST_QUADRANT_LEN (quadrant->level) >> 1;
-  map_coordinates (quadrant->x + h2, quadrant->y + h2,
+  p4est_quadrant_volume_coordinates (quadrant, coords); /* quadrant center */
+  map_coordinates (coords[0], coords[1],
 #ifndef P4_TO_P8
                    0,
 #else
-                   quadrant->z + h2,
+                   coords[2],
 #endif
                    which_tree, xyz);
 
