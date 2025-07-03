@@ -132,6 +132,8 @@ refine_fn (p4est_t *p4est, p4est_topidx_t which_tree,
 static void
 create_p4est (search_partition_global_t *g)
 {
+  int                 il;
+
   /* Create brick p4est. */
   g->conn = p4est_connectivity_new_brick (2, 2,
 #ifdef P4_TO_P8
@@ -146,13 +148,16 @@ create_p4est (search_partition_global_t *g)
     p4est_new_ext (sc_MPI_COMM_WORLD, g->conn, 0, g->uniform_level, 1, 0,
                    NULL, g);
 
-  /* to do: better make a loop of non-recursive refinement and partition.
-     even when there is no refinement at all, execute partition at least once:
-     this is necessary since p4est_new_ext does not partition for coarsening */
+  /* We like the invariant that after partitioning, partition-independent
+     coarsening is always possible since every family of siblings is placed
+     on a single process; this is not guaranteed by p4est_new_ext. */
+  p4est_partition (g->p4est, 1, NULL);
 
   /* refine the forest adaptively around two points g->a and g->b */
-  p4est_refine (g->p4est, 1, refine_fn, NULL);
-  p4est_partition (g->p4est, 0, NULL);
+  for (il = g->uniform_level; il < g->max_level; il++) {
+    p4est_refine (g->p4est, 0, refine_fn, NULL);
+    p4est_partition (g->p4est, 0, NULL);
+  }
 }
 
 static void
