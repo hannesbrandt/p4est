@@ -298,8 +298,8 @@ search_local (search_partition_global_t *g)
     gnq += glnq[il];
     *(size_t *) sc_array_index (g->global_nlq, il) = glnq[il];
   }
-  P4EST_GLOBAL_INFOF
-    ("Queries found globally during local search = %lld (expected %ld)\n",
+  P4EST_GLOBAL_PRODUCTIONF
+    ("Queries found globally during local search: %lld (expected %ld)\n",
      gnq, g->queries->elem_count);
   P4EST_ASSERT (g->queries->elem_count <= (size_t) gnq);
   P4EST_FREE (glnq);
@@ -336,6 +336,7 @@ static void
 search_partition (search_partition_global_t *g)
 {
   size_t              iz, lenz, buffer_size;
+  size_t              num_queries_found;
   int                 retb;
   char               *buffer;
 
@@ -361,7 +362,9 @@ search_partition (search_partition_global_t *g)
   buffer = P4EST_ALLOC (char, buffer_size);
 
   lenz = 0;
+  num_queries_found = 0;
   for (iz = 0; iz < g->num_queries_per_rank->elem_count; iz++) {
+    /* add result to buffer */
     if (iz % 10 == 0) {
       P4EST_ASSERT (buffer_size >= lenz);
       retb = snprintf (buffer + lenz, buffer_size - lenz, "\n");
@@ -372,8 +375,14 @@ search_partition (search_partition_global_t *g)
                      sc_array_index (g->num_queries_per_rank, iz));
     SC_CHECK_ABORT (retb > 0, "Overflow in snprintf");
     lenz += retb;
+
+    /* compute total number of queries found during partition search */
+    num_queries_found += *(size_t *) sc_array_index (g->num_queries_per_rank, iz);
   }
-  P4EST_GLOBAL_INFOF
+  P4EST_GLOBAL_PRODUCTIONF
+    ("Queries found during partition search: %ld (expected %ld)\n",
+     num_queries_found, g->queries->elem_count);
+  P4EST_GLOBAL_STATISTICSF
     ("Partition search found the following query counts %s\n", buffer);
 
   /* the buffer is no longer accessed */
@@ -474,7 +483,7 @@ main (int argc, char **argv)
 
   /* Package init. */
   sc_init (sc_MPI_COMM_WORLD, 1, 1, NULL, SC_LP_DEFAULT);
-  p4est_init (NULL, SC_LP_DEFAULT);
+  p4est_init (NULL, SC_LP_INFO);
 
   opt = sc_options_new (argv[0]);
   sc_options_add_int (opt, 'l', "minlevel", &g->uniform_level, 3,
