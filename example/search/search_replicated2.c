@@ -217,7 +217,6 @@ quadrant_contains_query (p4est_quadrant_t *quadrant,
 {
   double              qxyz[3];
   double              qlen;
-  double              tol;
 
   /* compute lower, left corners coords for quadrant bounds */
   map_coordinates (quadrant->x, quadrant->y,
@@ -229,11 +228,11 @@ quadrant_contains_query (p4est_quadrant_t *quadrant,
                    which_tree, qxyz);
   qlen = 0.5 * P4EST_QUADRANT_LEN (quadrant->level) * COORDINATE_IROOTLEN;
 
-  /* check if query is contained in quadrant */
-  tol = 1e-14;
-  if (p->xyz[0] < qxyz[0] - tol || p->xyz[0] > qxyz[0] + qlen + tol ||
-      p->xyz[1] < qxyz[1] - tol || p->xyz[1] > qxyz[1] + qlen + tol ||
-      p->xyz[2] < qxyz[2] - tol || p->xyz[2] > qxyz[2] + qlen + tol) {
+  /* for the replicated points we can operate on half-open intervals without
+   * adding a tolerance */
+  if (p->xyz[0] < qxyz[0] || p->xyz[0] > qxyz[0] + qlen ||
+      p->xyz[1] < qxyz[1] || p->xyz[1] > qxyz[1] + qlen ||
+      p->xyz[2] < qxyz[2] || p->xyz[2] > qxyz[2] + qlen) {
     return 0;
   }
   return 1;
@@ -295,7 +294,7 @@ search_local (search_partition_global_t *g)
   P4EST_GLOBAL_PRODUCTIONF
     ("Queries found globally during local search: %d (expected %d)\n",
      gnq, g->num_global_queries);
-  P4EST_ASSERT (g->num_global_queries <= gnq);
+  P4EST_ASSERT (g->num_global_queries == gnq);
 }
 
 static int
