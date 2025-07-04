@@ -207,8 +207,8 @@ generate_queries (search_partition_global_t *g)
                          g->num_global_queries * sizeof (query_point_t),
                          sc_MPI_BYTE, 0, g->p4est->mpicomm);
   SC_CHECK_MPI (mpiret);
-  P4EST_GLOBAL_INFOF ("Created %ld global queries.\n",
-                      g->queries->elem_count);
+  P4EST_GLOBAL_PRODUCTIONF ("Created %lld global queries.\n",
+                            (unsigned long long) g->queries->array);
 }
 
 static int
