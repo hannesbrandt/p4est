@@ -48,13 +48,13 @@ typedef struct search_partition_global
   p4est_t            *p4est;    /* the resulting p4est */
 
   /* query points */
-  size_t              num_queries;      /* number of queries created on each process */
+  int                 num_global_queries;       /* global number of queries */
   int                 seed;     /* seed for random query creation */
   double              clustering_exponent;      /* affects the distribution of queries */
   sc_array_t         *queries;  /* array of query points */
 
   /* search statistics */
-  size_t              num_local_queries;        /* queries found in local search */
+  int                 num_local_queries;        /* queries found in local search */
   sc_array_t         *num_queries_per_rank;     /* queries found in partition search */
   sc_array_t         *global_nlq;       /* num_local_queries gathered globally */
 
@@ -163,63 +163,52 @@ create_p4est (search_partition_global_t *g)
 static void
 generate_queries (search_partition_global_t *g)
 {
-  size_t              iq, nqh;
-  int                 id;
+  int                 iq, nqh, id;
   query_point_t      *p;
   double              t;
-  sc_array_t         *local_queries;
+  int                 mpiret;
 
   /* to do: pass global number of queries on command line and
      compute distributed count using p4est_partition_cut_gloidx () */
 
   /* generate local queries */
-  local_queries = sc_array_new_count (sizeof (query_point_t), g->num_queries);
-  sc_array_memset (local_queries, 0);
-  nqh = local_queries->elem_count / 2;
-  /* vary seeds between processes to get reproducible variety in points */
-  srand (g->seed + 1000 * g->p4est->mpirank);
-  for (iq = 0; iq < local_queries->elem_count; iq++) {
-    p = (query_point_t *) sc_array_index (local_queries, iq);
-    p->is_local = 0;
-    p->rank = -1;
-    for (id = 0; id < P4EST_DIM; id++) {
-      p->xyz[id] = rand () / (RAND_MAX + 1.);
-    }
+  g->queries =
+    sc_array_new_count (sizeof (query_point_t), g->num_global_queries);
+  sc_array_memset (g->queries, 0);
+  if (g->p4est->mpirank == 0) {
+    srand (g->seed);
+    nqh = g->num_global_queries / 2;
+    for (iq = 0; iq < g->num_global_queries; iq++) {
+      p = (query_point_t *) sc_array_index_int (g->queries, iq);
+      p->is_local = 0;
+      p->rank = -1;
+      for (id = 0; id < P4EST_DIM; id++) {
+        p->xyz[id] = rand () / (RAND_MAX + 1.);
+      }
 
-    /* move point closer to g->b or g->c depending on iq and random t */
-    t = pow (rand () / (RAND_MAX + 1.), g->clustering_exponent);
-    /* move the point to position sp->xyz * t + (1 - t) * {g->b,g->c} */
-    if (iq < nqh) {
-      p->xyz[0] = t * p->xyz[0] + (1 - t) * g->b[0];
-      p->xyz[1] = t * p->xyz[1] + (1 - t) * g->b[1];
-      p->xyz[2] = t * p->xyz[2] + (1 - t) * g->b[2];
-    }
-    else {
-      p->xyz[0] = t * p->xyz[0] + (1 - t) * g->c[0];
-      p->xyz[1] = t * p->xyz[1] + (1 - t) * g->c[1];
-      p->xyz[2] = t * p->xyz[2] + (1 - t) * g->c[2];
+      /* move point closer to g->b or g->c depending on iq and random t */
+      t = pow (rand () / (RAND_MAX + 1.), g->clustering_exponent);
+      /* move the point to position sp->xyz * t + (1 - t) * {g->b,g->c} */
+      if (iq < nqh) {
+        p->xyz[0] = t * p->xyz[0] + (1 - t) * g->b[0];
+        p->xyz[1] = t * p->xyz[1] + (1 - t) * g->b[1];
+        p->xyz[2] = t * p->xyz[2] + (1 - t) * g->b[2];
+      }
+      else {
+        p->xyz[0] = t * p->xyz[0] + (1 - t) * g->c[0];
+        p->xyz[1] = t * p->xyz[1] + (1 - t) * g->c[1];
+        p->xyz[2] = t * p->xyz[2] + (1 - t) * g->c[2];
+      }
     }
   }
 
-  /* gather global queries on all processes */
-  g->queries =
-    sc_array_new_count (sizeof (query_point_t),
-                        g->p4est->mpisize * g->num_queries);
-  sc_array_memset (g->queries, 0);
-  sc_MPI_Allgather (local_queries->array,
-                    g->num_queries * sizeof (query_point_t), sc_MPI_BYTE,
-                    g->queries->array,
-                    g->num_queries * sizeof (query_point_t), sc_MPI_BYTE,
-                    g->p4est->mpicomm);
+  /* broadcast queries to all processes */
+  mpiret = sc_MPI_Bcast (g->queries->array,
+                         g->num_global_queries * sizeof (query_point_t),
+                         sc_MPI_BYTE, 0, g->p4est->mpicomm);
+  SC_CHECK_MPI (mpiret);
   P4EST_GLOBAL_INFOF ("Created %ld global queries.\n",
                       g->queries->elem_count);
-
-  /* to do: generate all points on process 0 for this example,
-     which is designed to verify global against local search.
-     make this exception to the rule very clear in the docs. */
-
-  /* cleanup */
-  sc_array_destroy (local_queries);
 }
 
 static int
@@ -270,8 +259,7 @@ local_callback (p4est_t *p4est, p4est_topidx_t which_tree,
     /* we are on a local leaf */
     p->is_local = 1;
     g->num_local_queries++;
-    *(double *) sc_array_index (g->num_queries_per_quad,
-                                (size_t) local_num) += 1.;
+    *(double *) sc_array_index (g->num_queries_per_quad, local_num) += 1.;
   }
 
   return 1;
@@ -280,8 +268,9 @@ local_callback (p4est_t *p4est, p4est_topidx_t which_tree,
 static void
 search_local (search_partition_global_t *g)
 {
-  long long           lnq, *glnq, gnq;
+  int                 gnq;
   size_t              il;
+  int                 mpiret;
 
   /* search queries locally */
   g->num_local_queries = 0;
@@ -289,24 +278,24 @@ search_local (search_partition_global_t *g)
     sc_array_new_count (sizeof (double), g->p4est->local_num_quadrants);
   sc_array_memset (g->num_queries_per_quad, 0);
   p4est_search_local (g->p4est, 0, NULL, local_callback, g->queries);
-  P4EST_INFOF ("Queries found in local search = %ld\n", g->num_local_queries);
+  P4EST_INFOF ("Queries found in local search = %d\n", g->num_local_queries);
 
   /* allgather local num queries for future comparison with partition search */
-  lnq = (long long) g->num_local_queries;
-  glnq = P4EST_ALLOC (long long, g->p4est->mpisize);
-  sc_MPI_Allgather (&lnq, 1, sc_MPI_LONG_LONG_INT, glnq, 1,
-                    sc_MPI_LONG_LONG_INT, g->p4est->mpicomm);
-  g->global_nlq = sc_array_new_count (sizeof (size_t), g->p4est->mpisize);
+  g->global_nlq = sc_array_new_count (sizeof (int), g->p4est->mpisize);
+  mpiret = sc_MPI_Allgather (&g->num_local_queries, 1, sc_MPI_INT,
+                             g->global_nlq->array, 1, sc_MPI_INT,
+                             g->p4est->mpicomm);
+  SC_CHECK_MPI (mpiret);
+
+  /* compute sum of local number of queries across all processes */
   gnq = 0;
   for (il = 0; il < g->global_nlq->elem_count; il++) {
-    gnq += glnq[il];
-    *(size_t *) sc_array_index (g->global_nlq, il) = glnq[il];
+    gnq += *(int *) sc_array_index (g->global_nlq, il);
   }
   P4EST_GLOBAL_PRODUCTIONF
-    ("Queries found globally during local search: %lld (expected %ld)\n",
-     gnq, g->queries->elem_count);
-  P4EST_ASSERT (g->queries->elem_count <= (size_t) gnq);
-  P4EST_FREE (glnq);
+    ("Queries found globally during local search: %d (expected %d)\n",
+     gnq, g->num_global_queries);
+  P4EST_ASSERT (g->num_global_queries <= gnq);
 }
 
 static int
@@ -340,13 +329,13 @@ static void
 search_partition (search_partition_global_t *g)
 {
   size_t              iz, lenz, buffer_size;
-  size_t              num_queries_found;
+  int                 num_queries_found;
   int                 retb;
   char               *buffer;
 
   /* search queries in the partition */
   g->num_queries_per_rank =
-    sc_array_new_count (sizeof (size_t), g->p4est->mpisize);
+    sc_array_new_count (sizeof (int), g->p4est->mpisize);
   sc_array_memset (g->num_queries_per_rank, 0);
   p4est_search_partition (g->p4est, 0, NULL, partition_callback, g->queries);
 
@@ -356,7 +345,7 @@ search_partition (search_partition_global_t *g)
     if (iz % 10 == 0) {
       buffer_size += 1;
     }
-    retb = snprintf (NULL, 0, "%7ld ", *(size_t *)
+    retb = snprintf (NULL, 0, "%7d ", *(int *)
                      sc_array_index (g->num_queries_per_rank, iz));
     SC_CHECK_ABORT (retb > 0, "Overflow in snprintf");
     buffer_size += (size_t) retb;
@@ -375,18 +364,18 @@ search_partition (search_partition_global_t *g)
       SC_CHECK_ABORT (retb == 1, "Overflow in snprintf");
       lenz += retb;
     }
-    retb = snprintf (buffer + lenz, buffer_size - lenz, "%7ld ", *(size_t *)
+    retb = snprintf (buffer + lenz, buffer_size - lenz, "%7d ", *(int *)
                      sc_array_index (g->num_queries_per_rank, iz));
     SC_CHECK_ABORT (retb > 0, "Overflow in snprintf");
     lenz += retb;
 
     /* compute total number of queries found during partition search */
     num_queries_found +=
-      *(size_t *) sc_array_index (g->num_queries_per_rank, iz);
+      *(int *) sc_array_index (g->num_queries_per_rank, iz);
   }
   P4EST_GLOBAL_PRODUCTIONF
-    ("Queries found during partition search: %ld (expected %ld)\n",
-     num_queries_found, g->queries->elem_count);
+    ("Queries found during partition search: %d (expected %d)\n",
+     num_queries_found, g->num_global_queries);
   P4EST_GLOBAL_STATISTICSF
     ("Partition search found the following query counts %s\n", buffer);
 
@@ -395,8 +384,8 @@ search_partition (search_partition_global_t *g)
 
   /* check results for consistency */
   for (iz = 0; iz < g->num_queries_per_rank->elem_count; iz++) {
-    P4EST_ASSERT (*(size_t *) sc_array_index (g->num_queries_per_rank, iz) ==
-                  *(size_t *) sc_array_index (g->global_nlq, iz));
+    P4EST_ASSERT (*(int *) sc_array_index (g->num_queries_per_rank, iz) ==
+                  *(int *) sc_array_index (g->global_nlq, iz));
   }
 }
 
@@ -415,9 +404,9 @@ write_vtk (search_partition_global_t *g)
   cont = NULL;
   do {
     /* open files for output */
-    snprintf (filename, BUFSIZ, "search_partition%d_%d_%d_%ld_%d_%.2f",
-              P4EST_DIM, g->uniform_level, g->max_level, g->num_queries,
-              g->seed, g->clustering_exponent);
+    snprintf (filename, BUFSIZ, "search_partition%d_%d_%d_%d_%d_%.2f",
+              P4EST_DIM, g->uniform_level, g->max_level,
+              g->num_global_queries, g->seed, g->clustering_exponent);
     cont = p4est_vtk_context_new (g->p4est, filename);
     if (NULL == p4est_vtk_write_header (cont)) {
       P4EST_LERRORF ("Failed to write header for %s\n", filename);
@@ -497,8 +486,8 @@ main (int argc, char **argv)
                       "Level of uniform refinement");
   sc_options_add_int (opt, 'L', "maxlevel", &g->max_level, 5,
                       "Level of maximum refinement");
-  sc_options_add_size_t (opt, 'q', "num-queries", &g->num_queries, 100,
-                         "Number of queries created per process");
+  sc_options_add_int (opt, 'q', "num-queries", &g->num_global_queries, 100,
+                      "Number of queries created per process");
   sc_options_add_int (opt, 's', "seed", &g->seed, 0,
                       "Seed for random queries");
   sc_options_add_bool (opt, 'v', "write-vtk", &g->write_vtk, 0,
@@ -527,6 +516,10 @@ main (int argc, char **argv)
     if (g->max_level < 0 || g->max_level > P4EST_QMAXLEVEL) {
       P4EST_GLOBAL_LERRORF ("Maximum level out of bounds 0..%d\n",
                             P4EST_QMAXLEVEL);
+      ue = 1;
+    }
+    if (g->num_global_queries < 0) {
+      P4EST_GLOBAL_LERROR ("Numer of queries has to be non-negative.\n");
       ue = 1;
     }
     if (g->seed < 0) {
