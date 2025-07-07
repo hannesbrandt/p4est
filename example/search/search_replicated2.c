@@ -48,7 +48,10 @@ typedef struct search_partition_global
   p4est_t            *p4est;    /* the resulting p4est */
 
   /* query points */
-  int                 num_global_queries;       /* global number of queries */
+  p4est_locidx_t      num_global_queries;       /* global number of queries;
+                                                 * of type p4est_locidx_t, since
+                                                 * queries are replicated across
+                                                 * all processes */
   int                 seed;     /* seed for random query creation */
   double              clustering_exponent;      /* affects the distribution of queries */
   sc_array_t         *queries;  /* array of query points */
@@ -163,7 +166,8 @@ create_p4est (search_partition_global_t *g)
 static void
 generate_queries (search_partition_global_t *g)
 {
-  int                 iq, nqh, id;
+  p4est_locidx_t      iq, nqh;
+  int                 id;
   query_point_t      *p;
   double              t;
   int                 mpiret;
@@ -208,7 +212,7 @@ generate_queries (search_partition_global_t *g)
                          sc_MPI_BYTE, 0, g->p4est->mpicomm);
   SC_CHECK_MPI (mpiret);
   P4EST_GLOBAL_PRODUCTIONF ("Created %lld global queries.\n",
-                            (unsigned long long) g->queries->array);
+                            (unsigned long long) g->queries->elem_count);
 }
 
 static int
@@ -293,8 +297,8 @@ search_local (search_partition_global_t *g)
   }
   P4EST_GLOBAL_PRODUCTIONF
     ("Queries found globally during local search: %d (expected %d)\n",
-     gnq, g->num_global_queries);
-  P4EST_ASSERT (g->num_global_queries == gnq);
+     gnq, (int) g->num_global_queries);
+  P4EST_ASSERT (g->num_global_queries == (p4est_locidx_t) gnq);
 }
 
 static int
@@ -374,7 +378,7 @@ search_partition (search_partition_global_t *g)
   }
   P4EST_GLOBAL_PRODUCTIONF
     ("Queries found during partition search: %d (expected %d)\n",
-     num_queries_found, g->num_global_queries);
+     num_queries_found, (int) g->num_global_queries);
   P4EST_GLOBAL_STATISTICSF
     ("Partition search found the following query counts %s\n", buffer);
 
@@ -405,7 +409,7 @@ write_vtk (search_partition_global_t *g)
     /* open files for output */
     snprintf (filename, BUFSIZ, "search_partition%d_%d_%d_%d_%d_%.2f",
               P4EST_DIM, g->uniform_level, g->max_level,
-              g->num_global_queries, g->seed, g->clustering_exponent);
+              (int) g->num_global_queries, g->seed, g->clustering_exponent);
     cont = p4est_vtk_context_new (g->p4est, filename);
     if (NULL == p4est_vtk_write_header (cont)) {
       P4EST_LERRORF ("Failed to write header for %s\n", filename);
@@ -469,6 +473,7 @@ main (int argc, char **argv)
   sc_options_t       *opt;
   int                 first_argc, ue, help;
   search_partition_global_t global, *g = &global;
+  int                 ngq;
 
   /* MPI initialization. */
   mpiret = sc_MPI_Init (&argc, &argv);
@@ -485,7 +490,7 @@ main (int argc, char **argv)
                       "Level of uniform refinement");
   sc_options_add_int (opt, 'L', "maxlevel", &g->max_level, 5,
                       "Level of maximum refinement");
-  sc_options_add_int (opt, 'q', "num-queries", &g->num_global_queries, 100,
+  sc_options_add_int (opt, 'q', "num-queries", &ngq, 100,
                       "Number of queries created per process");
   sc_options_add_int (opt, 's', "seed", &g->seed, 0,
                       "Seed for random queries");
@@ -500,6 +505,10 @@ main (int argc, char **argv)
   do {
     first_argc = sc_options_parse (p4est_get_package_id (), SC_LP_DEFAULT,
                                    opt, argc, argv);
+    /* num_global_queries is a p4est_locidx_t, as we replicate the queries on
+     * all processes */
+    g->num_global_queries = (p4est_locidx_t) ngq;
+
     if (first_argc < 0) {
       P4EST_GLOBAL_LERROR ("Invalid option format.\n");
       ue = 1;
