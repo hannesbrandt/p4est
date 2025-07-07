@@ -518,7 +518,11 @@ main (int argc, char **argv)
       ue = 1;
     }
     if (g->num_global_queries < 0) {
-      P4EST_GLOBAL_LERROR ("Numer of queries has to be non-negative.\n");
+      P4EST_GLOBAL_LERROR ("Number of queries has to be non-negative.\n");
+      ue = 1;
+    }
+    if ((long long) g->num_global_queries * sizeof (query_point_t) > INT_MAX) {
+      P4EST_GLOBAL_LERROR ("Number of queries too large for MPI buffer.\n");
       ue = 1;
     }
     if (g->seed < 0) {
