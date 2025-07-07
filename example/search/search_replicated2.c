@@ -136,6 +136,7 @@ static void
 create_p4est (search_partition_global_t *g)
 {
   int                 il;
+  p4est_gloidx_t      old_gnq;
 
   /* Create brick p4est. */
   g->conn = p4est_connectivity_new_brick (2, 2,
@@ -158,7 +159,14 @@ create_p4est (search_partition_global_t *g)
 
   /* refine the forest adaptively around two points g->a and g->b */
   for (il = g->uniform_level; il < g->max_level; il++) {
+    old_gnq = g->p4est->global_num_quadrants;
     p4est_refine (g->p4est, 0, refine_fn, NULL);
+
+    /* leave the loop as soon as no new refinement occurs */
+    if (old_gnq == g->p4est->global_num_quadrants) {
+      break;
+    }
+
     p4est_partition (g->p4est, 0, NULL);
   }
 }
