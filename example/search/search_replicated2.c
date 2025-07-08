@@ -180,9 +180,6 @@ generate_queries (search_partition_global_t *g)
   double              t;
   int                 mpiret;
 
-  /* to do: pass global number of queries on command line and
-     compute distributed count using p4est_partition_cut_gloidx () */
-
   /* generate local queries */
   g->queries =
     sc_array_new_count (sizeof (query_point_t), g->num_global_queries);
