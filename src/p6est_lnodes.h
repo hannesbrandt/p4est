@@ -113,7 +113,7 @@ typedef p8est_lnodes_buffer_t p6est_lnodes_buffer_t;
  *                       +-------+
  */
 /*@unused@*/
-static inline int
+inline int
 p6est_lnodes_decode (p6est_lnodes_code_t face_code, int hanging_face[6],
                      int hanging_edge[12])
 {
@@ -188,14 +188,14 @@ p6est_lnodes_t     *p6est_lnodes_new (p6est_t * p6est,
                                       p6est_ghost_t * ghost_layer,
                                       int degree);
 
-static inline void
+inline void
 p6est_lnodes_destroy (p6est_lnodes_t * lnodes)
 {
   p8est_lnodes_destroy (lnodes);
 }
 
 /*@unused@*/
-static inline p6est_lnodes_buffer_t *
+inline p6est_lnodes_buffer_t *
 p6est_lnodes_share_owned_begin (sc_array_t * node_data,
                                 p6est_lnodes_t * lnodes)
 {
@@ -203,63 +203,63 @@ p6est_lnodes_share_owned_begin (sc_array_t * node_data,
 }
 
 /*@unused@*/
-static inline void
+inline void
 p6est_lnodes_share_owned_end (p6est_lnodes_buffer_t * buffer)
 {
   p8est_lnodes_share_owned_end (buffer);
 }
 
 /*@unused@*/
-static inline void
+inline void
 p6est_lnodes_share_owned (sc_array_t * node_data, p6est_lnodes_t * lnodes)
 {
   p8est_lnodes_share_owned (node_data, lnodes);
 }
 
 /*@unused@*/
-static inline p6est_lnodes_buffer_t *
+inline p6est_lnodes_buffer_t *
 p6est_lnodes_share_all_begin (sc_array_t * node_data, p6est_lnodes_t * lnodes)
 {
   return p8est_lnodes_share_all_begin (node_data, lnodes);
 }
 
 /*@unused@*/
-static inline void
+inline void
 p6est_lnodes_share_all_end (p6est_lnodes_buffer_t * buffer)
 {
   p8est_lnodes_share_all_end (buffer);
 }
 
 /*@unused@*/
-static inline p6est_lnodes_buffer_t *
+inline p6est_lnodes_buffer_t *
 p6est_lnodes_share_all (sc_array_t * node_data, p6est_lnodes_t * lnodes)
 {
   return p8est_lnodes_share_all (node_data, lnodes);
 }
 
 /*@unused@*/
-static inline void
+inline void
 p6est_lnodes_buffer_destroy (p6est_lnodes_buffer_t * buffer)
 {
   p8est_lnodes_buffer_destroy (buffer);
 }
 
 /*@unused@*/
-static inline p6est_lnodes_rank_t *
+inline p6est_lnodes_rank_t *
 p6est_lnodes_rank_array_index_int (sc_array_t * array, int it)
 {
   return p8est_lnodes_rank_array_index_int (array, it);
 }
 
 /*@unused@*/
-static inline p6est_lnodes_rank_t *
+inline p6est_lnodes_rank_t *
 p6est_lnodes_rank_array_index (sc_array_t * array, size_t it)
 {
   return p8est_lnodes_rank_array_index (array, it);
 }
 
 /*@unused@*/
-static inline       p4est_gloidx_t
+inline              p4est_gloidx_t
 p6est_lnodes_global_index (p6est_lnodes_t * lnodes, p4est_locidx_t lidx)
 {
   return p8est_lnodes_global_index (lnodes, lidx);

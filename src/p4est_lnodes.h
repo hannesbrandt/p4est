@@ -197,7 +197,7 @@ p4est_lnodes_rank_t;
  *             note: not touched if there are no hanging faces.
  * \return              true if any face is hanging, false otherwise.
  */
-static inline int
+inline int
 p4est_lnodes_decode (p4est_lnodes_code_t face_code, int hanging_face[4])
 {
   P4EST_ASSERT (face_code >= 0);
@@ -383,7 +383,7 @@ void                p4est_lnodes_buffer_destroy (p4est_lnodes_buffer_t *
 /** Return a pointer to a lnodes_rank array element indexed by a int.
  */
 /*@unused@*/
-static inline p4est_lnodes_rank_t *
+inline p4est_lnodes_rank_t *
 p4est_lnodes_rank_array_index_int (sc_array_t * array, int it)
 {
   P4EST_ASSERT (array->elem_size == sizeof (p4est_lnodes_rank_t));
@@ -396,7 +396,7 @@ p4est_lnodes_rank_array_index_int (sc_array_t * array, int it)
 /** Return a pointer to a lnodes_rank array element indexed by a size_t.
  */
 /*@unused@*/
-static inline p4est_lnodes_rank_t *
+inline p4est_lnodes_rank_t *
 p4est_lnodes_rank_array_index (sc_array_t * array, size_t it)
 {
   P4EST_ASSERT (array->elem_size == sizeof (p4est_lnodes_rank_t));
@@ -408,7 +408,7 @@ p4est_lnodes_rank_array_index (sc_array_t * array, size_t it)
 
 /** Compute the global number of a local node number */
 /*@unused@*/
-static inline       p4est_gloidx_t
+inline              p4est_gloidx_t
 p4est_lnodes_global_index (p4est_lnodes_t * lnodes, p4est_locidx_t lidx)
 {
   p4est_locidx_t      owned = lnodes->owned_count;
