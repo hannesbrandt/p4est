@@ -4267,7 +4267,6 @@ p4est_source_ext (sc_io_source_t * src, sc_MPI_Comm mpicomm, size_t data_size,
 }
 
 /* definitions for inline functions */
-
 p4est_tree_t       *p4est_tree_array_index (sc_array_t * array,
                                             p4est_topidx_t it);
 p4est_quadrant_t   *p4est_quadrant_array_index (sc_array_t * array,

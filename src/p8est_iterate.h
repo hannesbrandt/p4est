@@ -338,7 +338,7 @@ void                p8est_iterate (p8est_t * p4est,
 /** Return a pointer to a iter_corner_side array element indexed by a int.
  */
 /*@unused@*/
-static inline p8est_iter_corner_side_t *
+inline p8est_iter_corner_side_t *
 p8est_iter_cside_array_index_int (sc_array_t * array, int it)
 {
   P4EST_ASSERT (array->elem_size == sizeof (p8est_iter_corner_side_t));
@@ -351,7 +351,7 @@ p8est_iter_cside_array_index_int (sc_array_t * array, int it)
 /** Return a pointer to a iter_corner_side array element indexed by a size_t.
  */
 /*@unused@*/
-static inline p8est_iter_corner_side_t *
+inline p8est_iter_corner_side_t *
 p8est_iter_cside_array_index (sc_array_t * array, size_t it)
 {
   P4EST_ASSERT (array->elem_size == sizeof (p8est_iter_corner_side_t));
@@ -364,7 +364,7 @@ p8est_iter_cside_array_index (sc_array_t * array, size_t it)
 /** Return a pointer to a iter_edge_side array element indexed by a int.
  */
 /*@unused@*/
-static inline p8est_iter_edge_side_t *
+inline p8est_iter_edge_side_t *
 p8est_iter_eside_array_index_int (sc_array_t * array, int it)
 {
   P4EST_ASSERT (array->elem_size == sizeof (p8est_iter_edge_side_t));
@@ -377,7 +377,7 @@ p8est_iter_eside_array_index_int (sc_array_t * array, int it)
 /** Return a pointer to a iter_edge_side array element indexed by a size_t.
  */
 /*@unused@*/
-static inline p8est_iter_edge_side_t *
+inline p8est_iter_edge_side_t *
 p8est_iter_eside_array_index (sc_array_t * array, size_t it)
 {
   P4EST_ASSERT (array->elem_size == sizeof (p8est_iter_edge_side_t));
@@ -390,7 +390,7 @@ p8est_iter_eside_array_index (sc_array_t * array, size_t it)
 /** Return a pointer to a iter_face_side array element indexed by a int.
  */
 /*@unused@*/
-static inline p8est_iter_face_side_t *
+inline p8est_iter_face_side_t *
 p8est_iter_fside_array_index_int (sc_array_t * array, int it)
 {
   P4EST_ASSERT (array->elem_size == sizeof (p8est_iter_face_side_t));
@@ -403,7 +403,7 @@ p8est_iter_fside_array_index_int (sc_array_t * array, int it)
 /** Return a pointer to a iter_face_side array element indexed by a size_t.
  */
 /*@unused@*/
-static inline p8est_iter_face_side_t *
+inline p8est_iter_face_side_t *
 p8est_iter_fside_array_index (sc_array_t * array, size_t it)
 {
   P4EST_ASSERT (array->elem_size == sizeof (p8est_iter_face_side_t));
