@@ -476,7 +476,7 @@ p4est_t            *p4est_load (const char *filename, sc_MPI_Comm mpicomm,
  * \param [in] index needs to be in [0]..[elem_count-1].
  */
 /*@unused@*/
-static inline p4est_tree_t *
+inline p4est_tree_t *
 p4est_tree_array_index (sc_array_t * array, p4est_topidx_t it)
 {
   P4EST_ASSERT (array->elem_size == sizeof (p4est_tree_t));
@@ -488,7 +488,7 @@ p4est_tree_array_index (sc_array_t * array, p4est_topidx_t it)
 
 /** Return a pointer to a quadrant array element indexed by a size_t. */
 /*@unused@*/
-static inline p4est_quadrant_t *
+inline p4est_quadrant_t *
 p4est_quadrant_array_index (sc_array_t * array, size_t it)
 {
   P4EST_ASSERT (array->elem_size == sizeof (p4est_quadrant_t));
@@ -505,7 +505,7 @@ p4est_quadrant_array_index (sc_array_t * array, size_t it)
  *                      This serves to make the function clean for valgrind.
  * \return              Newly allocated quadrant with contents of \a qsrc.
  */
-static inline p4est_quadrant_t *
+inline p4est_quadrant_t *
 p4est_quadrant_array_push_copy (sc_array_t * array,
                                 const p4est_quadrant_t *qsrc)
 {
@@ -525,7 +525,7 @@ p4est_quadrant_array_push_copy (sc_array_t * array,
  *                      This serves to make the quadrant clean for valgrind.
  */
 /*@unused@*/
-static inline p4est_quadrant_t *
+inline p4est_quadrant_t *
 p4est_quadrant_array_push (sc_array_t * array)
 {
   p4est_quadrant_t *q;
@@ -539,7 +539,7 @@ p4est_quadrant_array_push (sc_array_t * array)
 
 /** Call sc_mempool_alloc for a mempool creating quadrants. */
 /*@unused@*/
-static inline p4est_quadrant_t *
+inline p4est_quadrant_t *
 p4est_quadrant_mempool_alloc (sc_mempool_t * mempool)
 {
   P4EST_ASSERT (mempool->elem_size == sizeof (p4est_quadrant_t));
@@ -549,7 +549,7 @@ p4est_quadrant_mempool_alloc (sc_mempool_t * mempool)
 
 /** Call sc_list pop for a quadrant array. */
 /*@unused@*/
-static inline p4est_quadrant_t *
+inline p4est_quadrant_t *
 p4est_quadrant_list_pop (sc_list_t * list)
 {
   return (p4est_quadrant_t *) sc_list_pop (list);
