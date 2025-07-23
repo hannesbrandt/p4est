@@ -325,13 +325,13 @@ void                P4EST_LERRORF (const char *fmt, ...)
  */
 extern SC_DLL_PUBLIC int p4est_package_id;
 
-static inline void
+inline void
 p4est_log_indent_push (void)
 {
   sc_log_indent_push_count (p4est_package_id, 1);
 }
 
-static inline void
+inline void
 p4est_log_indent_pop (void)
 {
   sc_log_indent_pop_count (p4est_package_id, 1);
@@ -378,7 +378,7 @@ int                 p4est_get_package_id (void);
  * \return            An unsigned hash value.
  */
 /*@unused@*/
-static inline unsigned
+inline unsigned
 p4est_topidx_hash2 (const p4est_topidx_t * tt)
 {
   uint32_t            a, b, c;
@@ -404,7 +404,7 @@ p4est_topidx_hash2 (const p4est_topidx_t * tt)
  * \return            An unsigned hash value.
  */
 /*@unused@*/
-static inline unsigned
+inline unsigned
 p4est_topidx_hash3 (const p4est_topidx_t * tt)
 {
   uint32_t            a, b, c;
@@ -432,7 +432,7 @@ p4est_topidx_hash3 (const p4est_topidx_t * tt)
  * \return            An unsigned hash value.
  */
 /*@unused@*/
-static inline unsigned
+inline unsigned
 p4est_topidx_hash4 (const p4est_topidx_t * tt)
 {
   uint32_t            a, b, c;
@@ -461,7 +461,7 @@ p4est_topidx_hash4 (const p4est_topidx_t * tt)
 }
 
 /*@unused@*/
-static inline int
+inline int
 p4est_topidx_is_sorted (p4est_topidx_t * t, int length)
 {
   int                 i;
@@ -475,8 +475,8 @@ p4est_topidx_is_sorted (p4est_topidx_t * t, int length)
 }
 
 /*@unused@*/
-static inline void
-p4est_topidx_bsort (p4est_topidx_t * t, int length)
+inline void
+p4est_topidx_bsort (p4est_topidx_t *t, int length)
 {
   int                 i, j;
   p4est_topidx_t      tswap;
@@ -496,7 +496,7 @@ p4est_topidx_bsort (p4est_topidx_t * t, int length)
 }
 
 /*@unused@*/
-static inline       uint64_t
+inline              uint64_t
 p4est_partition_cut_uint64 (uint64_t global_num, int p, int num_procs)
 {
   uint64_t            result;
@@ -523,7 +523,7 @@ p4est_partition_cut_uint64 (uint64_t global_num, int p, int num_procs)
 }
 
 /*@unused@*/
-static inline       p4est_gloidx_t
+inline              p4est_gloidx_t
 p4est_partition_cut_gloidx (p4est_gloidx_t global_num, int p, int num_procs)
 {
   p4est_gloidx_t      result;
