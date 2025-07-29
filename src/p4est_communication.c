@@ -41,7 +41,7 @@
 
 int
 p4est_bsearch_partition (p4est_gloidx_t target,
-                         const p4est_gloidx_t * gfq, int nmemb)
+                         const p4est_gloidx_t *gfq, int nmemb)
 {
   size_t              res;
 
@@ -57,7 +57,7 @@ p4est_bsearch_partition (p4est_gloidx_t target,
 }
 
 void
-p4est_comm_parallel_env_assign (p4est_t * p4est, sc_MPI_Comm mpicomm)
+p4est_comm_parallel_env_assign (p4est_t *p4est, sc_MPI_Comm mpicomm)
 {
   /* set MPI communicator */
   p4est->mpicomm = mpicomm;
@@ -68,7 +68,7 @@ p4est_comm_parallel_env_assign (p4est_t * p4est, sc_MPI_Comm mpicomm)
 }
 
 void
-p4est_comm_parallel_env_duplicate (p4est_t * p4est)
+p4est_comm_parallel_env_duplicate (p4est_t *p4est)
 {
   sc_MPI_Comm         mpicomm = p4est->mpicomm;
   int                 mpiret;
@@ -80,7 +80,7 @@ p4est_comm_parallel_env_duplicate (p4est_t * p4est)
 }
 
 void
-p4est_comm_parallel_env_release (p4est_t * p4est)
+p4est_comm_parallel_env_release (p4est_t *p4est)
 {
   int                 mpiret;
 
@@ -98,7 +98,7 @@ p4est_comm_parallel_env_release (p4est_t * p4est)
 }
 
 void
-p4est_comm_parallel_env_replace (p4est_t * p4est, sc_MPI_Comm mpicomm)
+p4est_comm_parallel_env_replace (p4est_t *p4est, sc_MPI_Comm mpicomm)
 {
   /* check if input MPI communicator has same size and same rank order */
 #ifdef P4EST_ENABLE_DEBUG
@@ -120,7 +120,7 @@ p4est_comm_parallel_env_replace (p4est_t * p4est, sc_MPI_Comm mpicomm)
 }
 
 void
-p4est_comm_parallel_env_get_info (p4est_t * p4est)
+p4est_comm_parallel_env_get_info (p4est_t *p4est)
 {
   int                 mpiret;
 
@@ -131,7 +131,7 @@ p4est_comm_parallel_env_get_info (p4est_t * p4est)
 }
 
 int
-p4est_comm_parallel_env_is_null (p4est_t * p4est)
+p4est_comm_parallel_env_is_null (p4est_t *p4est)
 {
   return (p4est->mpicomm == sc_MPI_COMM_NULL);
 }
@@ -323,7 +323,7 @@ p4est_comm_parallel_env_reduce_ext (p4est_t ** p4est_supercomm,
 }
 
 void
-p4est_comm_count_quadrants (p4est_t * p4est)
+p4est_comm_count_quadrants (p4est_t *p4est)
 {
   int                 mpiret;
   p4est_gloidx_t      qlocal = p4est->local_num_quadrants;
@@ -344,7 +344,7 @@ p4est_comm_count_quadrants (p4est_t * p4est)
 }
 
 void
-p4est_comm_global_partition (p4est_t * p4est, p4est_quadrant_t * first_quad)
+p4est_comm_global_partition (p4est_t *p4est, p4est_quadrant_t *first_quad)
 {
   const int           num_procs = p4est->mpisize;
   const p4est_topidx_t num_trees = p4est->connectivity->num_trees;
@@ -413,7 +413,7 @@ p4est_comm_global_partition (p4est_t * p4est, p4est_quadrant_t * first_quad)
 
 void
 p4est_comm_global_first_quadrant (p4est_gloidx_t global_num_quadrants,
-                                  int mpisize, p4est_gloidx_t * gfq)
+                                  int mpisize, p4est_gloidx_t *gfq)
 {
   int                 i;
 
@@ -429,7 +429,7 @@ p4est_comm_global_first_quadrant (p4est_gloidx_t global_num_quadrants,
 }
 
 void
-p4est_comm_count_pertree (p4est_t * p4est, p4est_gloidx_t * pertree)
+p4est_comm_count_pertree (p4est_t *p4est, p4est_gloidx_t *pertree)
 {
   const int           num_procs = p4est->mpisize;
   const int           rank = p4est->mpirank;
@@ -625,8 +625,8 @@ p4est_comm_is_empty_gfp (const p4est_quadrant_t *gfp, int num_procs, int p)
 }
 
 int
-p4est_comm_is_contained (p4est_t * p4est, p4est_locidx_t which_tree,
-                         const p4est_quadrant_t * q, int rank)
+p4est_comm_is_contained (p4est_t *p4est, p4est_locidx_t which_tree,
+                         const p4est_quadrant_t *q, int rank)
 {
   p4est_topidx_t      ctree;
   p4est_quadrant_t    qlast;
@@ -733,8 +733,8 @@ int                 p4est_comm_is_owner_gfp
 }
 
 int
-p4est_comm_find_owner (p4est_t * p4est, p4est_locidx_t which_tree,
-                       const p4est_quadrant_t * q, int guess)
+p4est_comm_find_owner (p4est_t *p4est, p4est_locidx_t which_tree,
+                       const p4est_quadrant_t *q, int guess)
 {
   const int           num_procs = p4est->mpisize;
   const p4est_quadrant_t *global_first_position =
@@ -810,7 +810,7 @@ p4est_comm_find_owner (p4est_t * p4est, p4est_locidx_t which_tree,
 }
 
 void
-p4est_comm_tree_info (p4est_t * p4est, p4est_locidx_t which_tree,
+p4est_comm_tree_info (p4est_t *p4est, p4est_locidx_t which_tree,
                       int full_tree[], int tree_contact[],
                       const p4est_quadrant_t ** pfirst_pos,
                       const p4est_quadrant_t ** pnext_pos)
@@ -858,9 +858,9 @@ p4est_comm_tree_info (p4est_t * p4est, p4est_locidx_t which_tree,
 }
 
 int
-p4est_comm_neighborhood_owned (p4est_t * p4est, p4est_locidx_t which_tree,
+p4est_comm_neighborhood_owned (p4est_t *p4est, p4est_locidx_t which_tree,
                                int full_tree[], int tree_contact[],
-                               p4est_quadrant_t * q)
+                               p4est_quadrant_t *q)
 {
   const p4est_qcoord_t qh = P4EST_QUADRANT_LEN (q->level);
   const int           rank = p4est->mpirank;
@@ -921,7 +921,7 @@ p4est_comm_neighborhood_owned (p4est_t * p4est, p4est_locidx_t which_tree,
 }
 
 int
-p4est_comm_sync_flag (p4est_t * p4est, int flag, sc_MPI_Op operation)
+p4est_comm_sync_flag (p4est_t *p4est, int flag, sc_MPI_Op operation)
 {
   int8_t              lbyte, gbyte;
   int                 mpiret;
@@ -973,8 +973,8 @@ p4est_comm_checksum (p4est_t * p4est, unsigned local_crc, size_t local_bytes)
 }
 
 void
-p4est_transfer_fixed (const p4est_gloidx_t * dest_gfq,
-                      const p4est_gloidx_t * src_gfq,
+p4est_transfer_fixed (const p4est_gloidx_t *dest_gfq,
+                      const p4est_gloidx_t *src_gfq,
                       sc_MPI_Comm mpicomm, int tag,
                       void *dest_data, const void *src_data, size_t data_size)
 {
@@ -986,8 +986,8 @@ p4est_transfer_fixed (const p4est_gloidx_t * dest_gfq,
 }
 
 static void
-p4est_transfer_assign_comm (const p4est_gloidx_t * dest_gfq,
-                            const p4est_gloidx_t * src_gfq,
+p4est_transfer_assign_comm (const p4est_gloidx_t *dest_gfq,
+                            const p4est_gloidx_t *src_gfq,
                             sc_MPI_Comm mpicomm, int *mpisize, int *mpirank)
 {
   int                 mpiret;
@@ -1177,7 +1177,7 @@ p4est_transfer_fixed_begin (const p4est_gloidx_t * dest_gfq,
 }
 
 void
-p4est_transfer_end (p4est_transfer_context_t * tc)
+p4est_transfer_end (p4est_transfer_context_t *tc)
 {
   int                 mpiret;
 
@@ -1202,7 +1202,7 @@ p4est_transfer_end (p4est_transfer_context_t * tc)
 }
 
 void
-p4est_transfer_fixed_end (p4est_transfer_context_t * tc)
+p4est_transfer_fixed_end (p4est_transfer_context_t *tc)
 {
   P4EST_ASSERT (tc != NULL);
   P4EST_ASSERT (tc->variable == 0);
@@ -1211,8 +1211,8 @@ p4est_transfer_fixed_end (p4est_transfer_context_t * tc)
 }
 
 void
-p4est_transfer_custom (const p4est_gloidx_t * dest_gfq,
-                       const p4est_gloidx_t * src_gfq,
+p4est_transfer_custom (const p4est_gloidx_t *dest_gfq,
+                       const p4est_gloidx_t *src_gfq,
                        sc_MPI_Comm mpicomm, int tag,
                        void *dest_data, const int *dest_sizes,
                        const void *src_data, const int *src_sizes)
@@ -1226,8 +1226,8 @@ p4est_transfer_custom (const p4est_gloidx_t * dest_gfq,
 }
 
 static p4est_transfer_context_t *
-p4est_transfer_begin (const p4est_gloidx_t * dest_gfq,
-                      const p4est_gloidx_t * src_gfq,
+p4est_transfer_begin (const p4est_gloidx_t *dest_gfq,
+                      const p4est_gloidx_t *src_gfq,
                       sc_MPI_Comm mpicomm, int tag,
                       void *dest_data, const int *dest_sizes,
                       const void *src_data, const int *src_sizes,
@@ -1447,7 +1447,7 @@ p4est_transfer_items_begin (const p4est_gloidx_t * dest_gfq,
 }
 
 void
-p4est_transfer_custom_end (p4est_transfer_context_t * tc)
+p4est_transfer_custom_end (p4est_transfer_context_t *tc)
 {
   P4EST_ASSERT (tc != NULL);
   P4EST_ASSERT (tc->variable == 1);
@@ -1456,8 +1456,8 @@ p4est_transfer_custom_end (p4est_transfer_context_t * tc)
 }
 
 void
-p4est_transfer_items (const p4est_gloidx_t * dest_gfq,
-                      const p4est_gloidx_t * src_gfq,
+p4est_transfer_items (const p4est_gloidx_t *dest_gfq,
+                      const p4est_gloidx_t *src_gfq,
                       sc_MPI_Comm mpicomm, int tag,
                       void *dest_data, const int *dest_sizes,
                       const void *src_data, const int *src_sizes,
@@ -1472,7 +1472,7 @@ p4est_transfer_items (const p4est_gloidx_t * dest_gfq,
 }
 
 void
-p4est_transfer_items_end (p4est_transfer_context_t * tc)
+p4est_transfer_items_end (p4est_transfer_context_t *tc)
 {
   P4EST_ASSERT (tc != NULL);
   P4EST_ASSERT (tc->variable == 2);
