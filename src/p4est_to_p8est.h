@@ -512,9 +512,11 @@
 #define p4est_transfer_items_begin      p8est_transfer_items_begin
 #define p4est_transfer_items_end        p8est_transfer_items_end
 #define p4est_transfer_end              p8est_transfer_end
+#define p4est_init_points_context       p8est_init_points_context
 #define p4est_transfer_search           p8est_transfer_search
 #define p4est_transfer_search_gfx       p8est_transfer_search_gfx
 #define p4est_transfer_search_gfp       p8est_transfer_search_gfp
+#define p4est_destroy_points_context    p8est_destroy_points_context
 
 /* functions in p4est_io */
 #define p4est_deflate_quadrants         p8est_deflate_quadrants

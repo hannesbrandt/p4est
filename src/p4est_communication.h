@@ -668,6 +668,15 @@ typedef struct p4est_points_context
 }
 p4est_points_context_t;
 
+/** Initialize a p4est_points_context_t for a subsequent transfer search.
+ * The points array is stored in the context, which takes ownership of the
+ * array. It is assumed that all passed points are the responsiblity of the
+ * calling process, as all other points would be deleted on entry of the next
+ * call of \ref p4est_transfer_search anyways.
+ */
+void                 p4est_init_points_context (p4est_points_context_t *c,
+                                                sc_array_t *points);
+
 /** Collective, point-to-point transfer for maintaining distributed
  * collection of points. After communication, points are stored (only) on the
  * processes whose domains they intersect. A return value of 0 indicates
@@ -784,5 +793,8 @@ int                 p4est_transfer_search_gfp (const p4est_quadrant_t *gfp,
                                                int save_unowned);
 
 SC_EXTERN_C_END;
+
+/** Destroy a p4est_points_context_t and free all point arrays it contains. */
+void                p4est_destroy_points_context (p4est_points_context_t *c);
 
 #endif /* !P4EST_COMMUNICATION_H */

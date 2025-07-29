@@ -1610,6 +1610,16 @@ p4est_points_context_is_valid (p4est_points_context_t *c)
 
 #endif
 
+void
+p4est_init_points_context (p4est_points_context_t *c, sc_array_t *points)
+{
+  /* take responsibility for complete points array */
+  c->points = points;
+  c->num_known = points->elem_count;
+  c->num_respon = points->elem_count;
+  c->num_unowned = 0;
+};
+
 /** Push point \a pi into the send buffer for \a receiver */
 static void
 push_to_send_buffer (p4est_transfer_meta_t *meta,
@@ -2307,3 +2317,10 @@ p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
   /* return success */
   return 0;
 }
+
+void
+p4est_destroy_points_context (p4est_points_context_t *c)
+{
+  P4EST_ASSERT (c->points != NULL);
+  sc_array_destroy_null (&c->points);
+};
