@@ -477,7 +477,6 @@ p8est_t            *p8est_load (const char *filename, sc_MPI_Comm mpicomm,
  * \param [in] array            Valid array, commonly the trees array of a
  *                              p8est.
  */
-/*@unused@*/
 inline p8est_tree_t *
 p8est_tree_array_index (sc_array_t * array, p4est_topidx_t it)
 {
@@ -489,7 +488,6 @@ p8est_tree_array_index (sc_array_t * array, p4est_topidx_t it)
 }
 
 /** Return a pointer to a quadrant array element indexed by a size_t. */
-/*@unused@*/
 inline p8est_quadrant_t *
 p8est_quadrant_array_index (sc_array_t * array, size_t it)
 {
@@ -526,7 +524,6 @@ p8est_quadrant_array_push_copy (sc_array_t * array,
  *                      In this case, we're writing to all bits of it.
  *                      This serves to make the quadrant clean for valgrind.
  */
-/*@unused@*/
 inline p8est_quadrant_t *
 p8est_quadrant_array_push (sc_array_t * array)
 {
@@ -540,7 +537,6 @@ p8est_quadrant_array_push (sc_array_t * array)
 }
 
 /** Call sc_mempool_alloc for a mempool creating quadrants. */
-/*@unused@*/
 inline p8est_quadrant_t *
 p8est_quadrant_mempool_alloc (sc_mempool_t * mempool)
 {
@@ -550,7 +546,6 @@ p8est_quadrant_mempool_alloc (sc_mempool_t * mempool)
 }
 
 /** Call sc_list pop for a quadrant array. */
-/*@unused@*/
 inline p8est_quadrant_t *
 p8est_quadrant_list_pop (sc_list_t * list)
 {

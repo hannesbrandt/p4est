@@ -112,7 +112,6 @@ typedef p8est_lnodes_buffer_t p6est_lnodes_buffer_t;
  *                      \|       |
  *                       +-------+
  */
-/*@unused@*/
 inline int
 p6est_lnodes_decode (p6est_lnodes_code_t face_code, int hanging_face[6],
                      int hanging_edge[12])
@@ -210,7 +209,6 @@ p6est_lnodes_destroy (p6est_lnodes_t * lnodes)
  * p6est_lnodes_buffer_destroy (it is not destroyed by
  * p6est_lnodes_share_owned_end).
  */
-/*@unused@*/
 inline p6est_lnodes_buffer_t *
 p6est_lnodes_share_owned_begin (sc_array_t * node_data,
                                 p6est_lnodes_t * lnodes)
@@ -218,7 +216,6 @@ p6est_lnodes_share_owned_begin (sc_array_t * node_data,
   return p8est_lnodes_share_owned_begin (node_data, lnodes);
 }
 
-/*@unused@*/
 inline void
 p6est_lnodes_share_owned_end (p6est_lnodes_buffer_t * buffer)
 {
@@ -229,7 +226,6 @@ p6est_lnodes_share_owned_end (p6est_lnodes_buffer_t * buffer)
  * p6est_lnodes_share_owned_begin.  Use if there is no local work that can be
  * done to mask the communication cost.
  */
-/*@unused@*/
 inline void
 p6est_lnodes_share_owned (sc_array_t * node_data, p6est_lnodes_t * lnodes)
 {
@@ -252,14 +248,12 @@ p6est_lnodes_share_owned (sc_array_t * node_data, p6est_lnodes_t * lnodes)
  * the \a buffer created by p6est_lnodes_share_all_begin is passed to
  * p6est_lnodes_share_all_end.
  */
-/*@unused@*/
 inline p6est_lnodes_buffer_t *
 p6est_lnodes_share_all_begin (sc_array_t * node_data, p6est_lnodes_t * lnodes)
 {
   return p8est_lnodes_share_all_begin (node_data, lnodes);
 }
 
-/*@unused@*/
 inline void
 p6est_lnodes_share_all_end (p6est_lnodes_buffer_t * buffer)
 {
@@ -273,14 +267,12 @@ p6est_lnodes_share_all_end (p6est_lnodes_buffer_t * buffer)
  *                  After processing this data, the buffer must be freed with
  *                  p6est_lnodes_buffer_destroy.
  */
-/*@unused@*/
 inline p6est_lnodes_buffer_t *
 p6est_lnodes_share_all (sc_array_t * node_data, p6est_lnodes_t * lnodes)
 {
   return p8est_lnodes_share_all (node_data, lnodes);
 }
 
-/*@unused@*/
 inline void
 p6est_lnodes_buffer_destroy (p6est_lnodes_buffer_t * buffer)
 {
@@ -288,7 +280,6 @@ p6est_lnodes_buffer_destroy (p6est_lnodes_buffer_t * buffer)
 }
 
 /** Return a pointer to a lnodes_rank array element indexed by a int. */
-/*@unused@*/
 inline p6est_lnodes_rank_t *
 p6est_lnodes_rank_array_index_int (sc_array_t * array, int it)
 {
@@ -296,7 +287,6 @@ p6est_lnodes_rank_array_index_int (sc_array_t * array, int it)
 }
 
 /** Return a pointer to a lnodes_rank array element indexed by a size_t. */
-/*@unused@*/
 inline p6est_lnodes_rank_t *
 p6est_lnodes_rank_array_index (sc_array_t * array, size_t it)
 {
@@ -304,7 +294,6 @@ p6est_lnodes_rank_array_index (sc_array_t * array, size_t it)
 }
 
 /** Compute the global number of a local node number */
-/*@unused@*/
 inline              p4est_gloidx_t
 p6est_lnodes_global_index (p6est_lnodes_t * lnodes, p4est_locidx_t lidx)
 {

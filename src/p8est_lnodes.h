@@ -428,7 +428,6 @@ void                p8est_lnodes_buffer_destroy (p8est_lnodes_buffer_t *
 
 /** Return a pointer to a lnodes_rank array element indexed by a int.
  */
-/*@unused@*/
 inline p8est_lnodes_rank_t *
 p8est_lnodes_rank_array_index_int (sc_array_t * array, int it)
 {
@@ -441,7 +440,6 @@ p8est_lnodes_rank_array_index_int (sc_array_t * array, int it)
 
 /** Return a pointer to a lnodes_rank array element indexed by a size_t.
  */
-/*@unused@*/
 inline p8est_lnodes_rank_t *
 p8est_lnodes_rank_array_index (sc_array_t * array, size_t it)
 {
@@ -453,7 +451,6 @@ p8est_lnodes_rank_array_index (sc_array_t * array, size_t it)
 }
 
 /** Compute the global number of a local node number */
-/*@unused@*/
 inline              p4est_gloidx_t
 p8est_lnodes_global_index (p8est_lnodes_t * lnodes, p4est_locidx_t lidx)
 {

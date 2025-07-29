@@ -550,7 +550,6 @@ p6est_t            *p6est_load (const char *filename, sc_MPI_Comm mpicomm,
                                 p6est_connectivity_t ** connectivity);
 
 /** Return a pointer to a quadrant array element indexed by a size_t. */
-/*@unused@*/
 inline p2est_quadrant_t *
 p2est_quadrant_array_index (sc_array_t * array, size_t it)
 {
@@ -561,7 +560,6 @@ p2est_quadrant_array_index (sc_array_t * array, size_t it)
 }
 
 /** Call sc_array_push for a quadrant array. */
-/*@unused@*/
 inline p2est_quadrant_t *
 p2est_quadrant_array_push (sc_array_t * array)
 {
@@ -575,7 +573,6 @@ p2est_quadrant_array_push (sc_array_t * array)
 }
 
 /** Call sc_mempool_alloc for a mempool creating quadrants. */
-/*@unused@*/
 inline p2est_quadrant_t *
 p2est_quadrant_mempool_alloc (sc_mempool_t * mempool)
 {
@@ -585,7 +582,6 @@ p2est_quadrant_mempool_alloc (sc_mempool_t * mempool)
 }
 
 /** Call sc_list pop for a quadrant array. */
-/*@unused@*/
 inline p2est_quadrant_t *
 p2est_quadrant_list_pop (sc_list_t * list)
 {
@@ -606,7 +602,6 @@ p2est_quadrant_list_pop (sc_list_t * list)
 
 /** Alloc the user data of a layer and initialize it, if a \a init_fn is
  * passed. */
-/*@unused@*/
 inline void
 p6est_layer_init_data (p6est_t *p6est, p4est_topidx_t which_tree,
                        p4est_quadrant_t *column,
@@ -624,7 +619,6 @@ p6est_layer_init_data (p6est_t *p6est, p4est_topidx_t which_tree,
 }
 
 /** Free the user data of a layer. */
-/*@unused@*/
 inline void
 p6est_layer_free_data (p6est_t *p6est, p2est_quadrant_t *layer)
 {

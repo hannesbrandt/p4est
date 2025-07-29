@@ -377,7 +377,6 @@ int                 p4est_get_package_id (void);
  * \param [in] tt     Array of (at least) two values.
  * \return            An unsigned hash value.
  */
-/*@unused@*/
 inline unsigned
 p4est_topidx_hash2 (const p4est_topidx_t * tt)
 {
@@ -403,7 +402,6 @@ p4est_topidx_hash2 (const p4est_topidx_t * tt)
  * \param [in] tt     Array of (at least) three values.
  * \return            An unsigned hash value.
  */
-/*@unused@*/
 inline unsigned
 p4est_topidx_hash3 (const p4est_topidx_t * tt)
 {
@@ -431,7 +429,6 @@ p4est_topidx_hash3 (const p4est_topidx_t * tt)
  * \param [in] tt     Array of (at least) four values.
  * \return            An unsigned hash value.
  */
-/*@unused@*/
 inline unsigned
 p4est_topidx_hash4 (const p4est_topidx_t * tt)
 {
@@ -464,7 +461,6 @@ p4est_topidx_hash4 (const p4est_topidx_t * tt)
  * \param [in] t      Array of p4est_topidx_t.
  * \param [in] length The length of array \a t.
  * \return            True, iff the array is correctly sorted. */
-/*@unused@*/
 inline int
 p4est_topidx_is_sorted (p4est_topidx_t * t, int length)
 {
@@ -481,7 +477,6 @@ p4est_topidx_is_sorted (p4est_topidx_t * t, int length)
 /** Sort an array of p4est_topidx_t from lowest to highest using bubble sort.
  * \param [in] t      Array of p4est_topidx_t.
  * \param [in] length The length of array \a t. */
-/*@unused@*/
 inline void
 p4est_topidx_bsort (p4est_topidx_t *t, int length)
 {
@@ -511,7 +506,6 @@ p4est_topidx_bsort (p4est_topidx_t *t, int length)
  * \return                The index of the first element local to rank \a p in
  *                        in the uniform partition of the range
  *                        [0, \a global_num - 1]. */
-/*@unused@*/
 inline              uint64_t
 p4est_partition_cut_uint64 (uint64_t global_num, int p, int num_procs)
 {
@@ -548,7 +542,6 @@ p4est_partition_cut_uint64 (uint64_t global_num, int p, int num_procs)
  *                        in the uniform partition of the range
  *                        [0, \a global_num - 1]. */
 
-/*@unused@*/
 inline              p4est_gloidx_t
 p4est_partition_cut_gloidx (p4est_gloidx_t global_num, int p, int num_procs)
 {
