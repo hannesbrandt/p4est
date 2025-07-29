@@ -1484,24 +1484,23 @@ p4est_transfer_items_end (p4est_transfer_context_t *tc)
 typedef struct p4est_transfer_meta
 {
   /* in the following p refers to the local rank, and q any rank */
-
-  /* data used for sending */
+/* data used for sending */
   /* number of points that p receives in this iteration */
-  size_t num_incoming;
+  size_t              num_incoming;
   /* q -> {points that p is sending to q} */
-  sc_array_t **send_buffers;
+  sc_array_t        **send_buffers;
   /* ranks receiving points from p */
-  sc_array_t *receivers;
+  sc_array_t         *receivers;
   /* number of points each receiver gets from p */
-  sc_array_t *recvs_counts;
+  sc_array_t         *recvs_counts;
 
   /* data used for receiving */
   /* ranks sending points to p */
-  sc_array_t *senders;
+  sc_array_t         *senders;
   /* number of points p gets from each sender */
-  sc_array_t *senders_counts;
+  sc_array_t         *senders_counts;
   /* q -> byte offset to receive message from q at */
-  size_t * offsets;
+  size_t             *offsets;
 } p4est_transfer_meta_t;
 
 /** Safely NULL-init transfer search metadata */
@@ -1528,7 +1527,7 @@ destroy_transfer_meta (p4est_transfer_meta_t *meta, int num_procs)
         sc_array_destroy_null (&meta->send_buffers[q]);
       }
     }
-  P4EST_FREE (meta->send_buffers);
+    P4EST_FREE (meta->send_buffers);
   }
 
   /* destroy receive data */
@@ -1549,20 +1548,20 @@ destroy_transfer_meta (p4est_transfer_meta_t *meta, int num_procs)
 typedef struct p4est_transfer_internal
 {
   /* point-quadrant intersection function */
-  p4est_intersect_t        intersect;
+  p4est_intersect_t   intersect;
   /* stores the last process we detected as intersecting each point */
-  int                     *last_procs;
+  int                *last_procs;
   /* communication metadata */
-  p4est_transfer_meta_t   *resp, *own;
+  p4est_transfer_meta_t *resp, *own;
   /* unowned points buffer */
-  sc_array_t *unowned_points;
+  sc_array_t         *unowned_points;
   /* the data to search with and then transfer */
-  p4est_points_context_t  *c;
+  p4est_points_context_t *c;
   /* user context passed in a p4est to intersect */
-  void                    *user_pointer;
+  void               *user_pointer;
 
   /* p4est data - NULL if running gfx/gfp */
-  p4est_t *p4est;
+  p4est_t            *p4est;
 
   /* data needed if we do not have a full p4est */
   /* global first quadrant array - NULL if running gfp */
@@ -1570,14 +1569,14 @@ typedef struct p4est_transfer_internal
   /* global first position array */
   const p4est_quadrant_t *gfp;
   /* number of processors encoded in gfq (plus one). */
-  int nmemb;
+  int                 nmemb;
   /* tree number matching the contents of gfq */
-  p4est_topidx_t num_trees;
+  p4est_topidx_t      num_trees;
   /* MPI communicator */
-  sc_MPI_Comm mpicomm;
+  sc_MPI_Comm         mpicomm;
 
   /* config option to save points not owned by any process */
-  int save_unowned;
+  int                 save_unowned;
 }
 p4est_transfer_internal_t;
 
@@ -1626,7 +1625,7 @@ push_to_send_buffer (p4est_transfer_meta_t *meta,
                      p4est_points_context_t *c,
                      p4est_locidx_t pi, int receiver)
 {
-  size_t point_size = c->points->elem_size;
+  size_t              point_size = c->points->elem_size;
 
   /* initialise receiver send buffer if it not already initialised */
   if (meta->send_buffers[receiver] == NULL) {
@@ -1635,8 +1634,7 @@ push_to_send_buffer (p4est_transfer_meta_t *meta,
 
   /* add point to send buffer */
   memcpy (sc_array_push (meta->send_buffers[receiver]),
-          sc_array_index(c->points, pi),
-          point_size);
+          sc_array_index (c->points, pi), point_size);
 }
 
 /** Point callback for \ref p4est_search_partition in compute_send_buffers
@@ -1657,11 +1655,11 @@ transfer_search_point (p4est_t *p4est, p4est_topidx_t which_tree,
                        p4est_quadrant_t *quadrant, int pfirst, int plast,
                        void *point_index)
 {
-  int intersection_found;
+  int                 intersection_found;
 
   /* context */
   p4est_transfer_internal_t *internal =
-      (p4est_transfer_internal_t *) p4est->user_pointer;
+    (p4est_transfer_internal_t *) p4est->user_pointer;
 
   /* communication metadata containing the send buffers we add to */
   p4est_transfer_meta_t *resp = internal->resp;
@@ -1748,7 +1746,7 @@ static void
 compute_send_buffers (p4est_transfer_internal_t *internal,
                       int num_procs, int rank)
 {
-  sc_array_t *search_objects;
+  sc_array_t         *search_objects;
   p4est_points_context_t *c = internal->c;
   p4est_transfer_meta_t *resp = internal->resp;
   p4est_transfer_meta_t *own = internal->own;
@@ -1773,7 +1771,8 @@ compute_send_buffers (p4est_transfer_internal_t *internal,
   }
 
   /* set up search objects for partition search */
-  search_objects = sc_array_new_count (sizeof (p4est_locidx_t), c->num_respon);
+  search_objects =
+    sc_array_new_count (sizeof (p4est_locidx_t), c->num_respon);
   for (il = 0; il < c->num_respon; ++il) {
     *(p4est_locidx_t *) sc_array_index (search_objects, il) = il;
   }
@@ -1805,10 +1804,9 @@ compute_send_buffers (p4est_transfer_internal_t *internal,
   if (internal->save_unowned) {
     for (il = 0; il < c->num_respon; ++il) {
       if (internal->last_procs[il] == -1) {
-        /* add point to unowned points buffer*/
+        /* add point to unowned points buffer */
         memcpy (sc_array_push (internal->unowned_points),
-                sc_array_index(c->points, il),
-                point_size);
+                sc_array_index (c->points, il), point_size);
       }
     }
   }
@@ -1832,7 +1830,7 @@ compute_send_buffers (p4est_transfer_internal_t *internal,
  */
 static int
 compute_receivers (p4est_transfer_meta_t *meta,
-                    size_t point_size, int num_procs, int rank)
+                   size_t point_size, int num_procs, int rank)
 {
   int                 err = 0;
 
@@ -1847,7 +1845,8 @@ compute_receivers (p4est_transfer_meta_t *meta,
       if (meta->send_buffers[q]->elem_count * point_size > (size_t) INT_MAX) {
         P4EST_LERRORF ("Message of %lld points from rank %d to rank %d is "
                        "too large.\n",
-                       (long long) meta->send_buffers[q]->elem_count, rank, q);
+                       (long long) meta->send_buffers[q]->elem_count, rank,
+                       q);
         err = 1;
         break;
       }
@@ -1916,7 +1915,9 @@ post_sends (p4est_transfer_meta_t *meta,
  * \param[in,out] meta communication metadata.
  */
 static void
-compute_offsets_and_num_incoming (p4est_transfer_meta_t *meta, size_t point_size) {
+compute_offsets_and_num_incoming (p4est_transfer_meta_t *meta,
+                                  size_t point_size)
+{
   /* initialize offset array */
   meta->num_incoming = 0;
   meta->offsets = P4EST_ALLOC (size_t, meta->senders->elem_count);
@@ -1945,7 +1946,7 @@ compute_offsets_and_num_incoming (p4est_transfer_meta_t *meta, size_t point_size
  *  \param[in] point_size size of a single point
 */
 static void
-post_receives (p4est_transfer_meta_t * meta,
+post_receives (p4est_transfer_meta_t *meta,
                char *recv_buffer,
                sc_MPI_Request *req, sc_MPI_Comm mpicomm, size_t point_size)
 {
@@ -1997,13 +1998,13 @@ post_receives (p4est_transfer_meta_t * meta,
  * \param[in] num_trees Tree number must match the contents of \a gfp.
  */
 static int
-p4est_transfer_search_internal (p4est_transfer_internal_t *internal);
+     p4est_transfer_search_internal (p4est_transfer_internal_t *internal);
 
 int
 p4est_transfer_search (p4est_t *p4est, p4est_points_context_t *c,
                        p4est_intersect_t intersect, int save_unowned)
 {
-  int err;
+  int                 err;
 
   /* Init internal context */
   p4est_transfer_internal_t internal;
@@ -2015,7 +2016,7 @@ p4est_transfer_search (p4est_t *p4est, p4est_points_context_t *c,
   internal.intersect = intersect;
   internal.p4est = p4est;
   internal.mpicomm = p4est->mpicomm;
-  internal.save_unowned =  save_unowned;
+  internal.save_unowned = save_unowned;
 
   /* These variables are not used because internal.p4est is not NULL */
   internal.gfp = NULL;
@@ -2040,13 +2041,12 @@ p4est_transfer_search (p4est_t *p4est, p4est_points_context_t *c,
 
 int
 p4est_transfer_search_gfx (const p4est_gloidx_t *gfq,
-                            const p4est_quadrant_t *gfp,
-                            int nmemb, p4est_topidx_t num_trees,
-                            void *user_pointer,
-                            sc_MPI_Comm mpicomm,
-                            p4est_points_context_t *c,
-                            p4est_intersect_t intersect,
-                            int save_unowned)
+                           const p4est_quadrant_t *gfp,
+                           int nmemb, p4est_topidx_t num_trees,
+                           void *user_pointer,
+                           sc_MPI_Comm mpicomm,
+                           p4est_points_context_t *c,
+                           p4est_intersect_t intersect, int save_unowned)
 {
   /* Init internal context */
   p4est_transfer_internal_t internal;
@@ -2075,12 +2075,11 @@ p4est_transfer_search_gfx (const p4est_gloidx_t *gfq,
 
 int
 p4est_transfer_search_gfp (const p4est_quadrant_t *gfp, int nmemb,
-                            p4est_topidx_t num_trees,
-                            void *user_pointer,
-                            sc_MPI_Comm mpicomm,
-                            p4est_points_context_t *c,
-                            p4est_intersect_t intersect,
-                            int save_unowned)
+                           p4est_topidx_t num_trees,
+                           void *user_pointer,
+                           sc_MPI_Comm mpicomm,
+                           p4est_points_context_t *c,
+                           p4est_intersect_t intersect, int save_unowned)
 {
   /* Init internal context */
   p4est_transfer_internal_t internal;
@@ -2119,8 +2118,8 @@ p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
   int                 err = 0;
   p4est_points_context_t *c = internal->c;
   const size_t        point_size = c->points->elem_size;
-  p4est_transfer_meta_t   resp;
-  p4est_transfer_meta_t   own;
+  p4est_transfer_meta_t resp;
+  p4est_transfer_meta_t own;
 
   /* Point context to communication metadata */
   internal->resp = &resp;
@@ -2162,8 +2161,7 @@ p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
      synchronising these errors until just before calling sc_notify_ext
      to avoid creating an unnecessary synchronisation point */
   errsend = compute_receivers (&resp, point_size, num_procs, rank);
-  errsend = errsend
-    || compute_receivers (&own, point_size, num_procs, rank);
+  errsend = errsend || compute_receivers (&own, point_size, num_procs, rank);
 
   /* if messages from this process are valid then continue optimistically */
   if (!errsend) {
@@ -2196,7 +2194,7 @@ p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
   if (err) {
     /* clean up send data */
     if (internal->unowned_points != NULL) {
-      sc_array_destroy_null(&internal->unowned_points);
+      sc_array_destroy_null (&internal->unowned_points);
     }
     destroy_transfer_meta (&resp, num_procs);
     destroy_transfer_meta (&own, num_procs);
@@ -2232,8 +2230,7 @@ p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
   if (num_incoming > (size_t) P4EST_LOCIDX_MAX) {
     errsend = 1;
     P4EST_LERRORF ("Rank %d would receive %lld points, which exceeds "
-                   "P4EST_LOCIDX_MAX\n",
-                   rank, (long long) num_incoming);
+                   "P4EST_LOCIDX_MAX\n", rank, (long long) num_incoming);
   }
 
   /* synchronise possible error of a process receiving too many points */
@@ -2245,7 +2242,7 @@ p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
   if (err) {
     /* clean up send data */
     if (internal->unowned_points != NULL) {
-      sc_array_destroy_null(&internal->unowned_points);
+      sc_array_destroy_null (&internal->unowned_points);
     }
     destroy_transfer_meta (&resp, num_procs);
     destroy_transfer_meta (&own, num_procs);
@@ -2276,14 +2273,10 @@ p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
 
   /* post non-blocking receives */
   post_receives (&resp, c->points->array + num_unowned * point_size,
-                 recv_req,
-                 mpicomm,
-                 point_size);
+                 recv_req, mpicomm, point_size);
   post_receives (&own,
                  c->points->array + resp.num_incoming * point_size,
-                 recv_req + resp.senders->elem_count,
-                 mpicomm,
-                 point_size);
+                 recv_req + resp.senders->elem_count, mpicomm, point_size);
 
   /* copy unowned points from buffer */
   if (internal->save_unowned) {
@@ -2292,18 +2285,16 @@ p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
   }
 
   /* wait for messages to send */
-  mpiret =
-    sc_MPI_Waitall (num_send_reqs, send_req, sc_MPI_STATUSES_IGNORE);
+  mpiret = sc_MPI_Waitall (num_send_reqs, send_req, sc_MPI_STATUSES_IGNORE);
   SC_CHECK_MPI (mpiret);
 
   /* Wait to receive messages */
-  mpiret =
-    sc_MPI_Waitall (num_recv_reqs, recv_req, sc_MPI_STATUSES_IGNORE);
+  mpiret = sc_MPI_Waitall (num_recv_reqs, recv_req, sc_MPI_STATUSES_IGNORE);
   SC_CHECK_MPI (mpiret);
 
   /* clean up communication metadata */
   if (internal->unowned_points != NULL) {
-    sc_array_destroy_null(&internal->unowned_points);
+    sc_array_destroy_null (&internal->unowned_points);
   }
   destroy_transfer_meta (&resp, num_procs);
   destroy_transfer_meta (&own, num_procs);
