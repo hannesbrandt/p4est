@@ -325,12 +325,14 @@ void                P4EST_LERRORF (const char *fmt, ...)
  */
 extern SC_DLL_PUBLIC int p4est_package_id;
 
+/** Add one space to the start of p4est's default log format. */
 inline void
 p4est_log_indent_push (void)
 {
   sc_log_indent_push_count (p4est_package_id, 1);
 }
 
+/** Remove one space from the start of p4est's default log format. */
 inline void
 p4est_log_indent_pop (void)
 {

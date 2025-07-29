@@ -335,12 +335,16 @@ p4est_lnodes_buffer_t *p4est_lnodes_share_owned_begin (sc_array_t * node_data,
                                                        p4est_lnodes_t *
                                                        lnodes);
 
+/** p4est_lnodes_shared_owned_end
+ *
+ * Complete sharing of the owned node data between processes as initiated in
+ * \ref p4est_lnodes_share_owned_begin. */
 void                p4est_lnodes_share_owned_end (p4est_lnodes_buffer_t *
                                                   buffer);
 
-/** Equivalent to calling p4est_lnodes_share_owned_end directly after
- * p4est_lnodes_share_owned_begin.  Use if there is no local work that can be
- * done to mask the communication cost.
+/** Equivalent to calling \ref p4est_lnodes_share_owned_end directly after
+ * \ref p4est_lnodes_share_owned_begin.  Use if there is no local work that can
+ * be done to mask the communication cost.
  */
 void                p4est_lnodes_share_owned (sc_array_t * node_data,
                                               p4est_lnodes_t * lnodes);
@@ -354,7 +358,7 @@ void                p4est_lnodes_share_owned (sc_array_t * node_data,
  * \a buffer->recv_buffers entry as described above.  The user can then perform
  * some arbitrary work that requires the data from all processes that share a
  * node (such as reduce, max, min, etc.).  When the work concludes, the
- * \a buffer should be destroyed with p4est_lnodes_buffer_destroy.
+ * \a buffer should be destroyed with \ref p4est_lnodes_buffer_destroy.
  *
  * Values of \a node_data are not guaranteed to be sent, and
  * \a buffer->recv_buffer entries are not guaranteed to be received until
@@ -364,19 +368,25 @@ void                p4est_lnodes_share_owned (sc_array_t * node_data,
 p4est_lnodes_buffer_t *p4est_lnodes_share_all_begin (sc_array_t * node_data,
                                                      p4est_lnodes_t * lnodes);
 
+/** p4est_lnodes_shared_all_end
+ *
+ * Complete sharing of the node data between all relevant processes as initiated
+ * in \ref p4est_lnodes_share_all_begin. */
 void                p4est_lnodes_share_all_end (p4est_lnodes_buffer_t *
                                                 buffer);
 
-/** Equivalent to calling p4est_lnodes_share_all_end directly after
- * p4est_lnodes_share_all_begin.  Use if there is no local work that can be
+/** Equivalent to calling \ref p4est_lnodes_share_all_end directly after
+ * \ref p4est_lnodes_share_all_begin.  Use if there is no local work that can be
  * done to mask the communication cost.
  * \return          A fully initialized buffer that contains the received data.
  *                  After processing this data, the buffer must be freed with
- *                  p4est_lnodes_buffer_destroy.
+ *                  \ref p4est_lnodes_buffer_destroy.
  */
 p4est_lnodes_buffer_t *p4est_lnodes_share_all (sc_array_t * node_data,
                                                p4est_lnodes_t * lnodes);
 
+/** Destroy the buffer filled with node data during a call to
+ * \ref p4est_lnodes_share_all_end or \ref p4est_lnodes_share_all.*/
 void                p4est_lnodes_buffer_destroy (p4est_lnodes_buffer_t *
                                                  buffer);
 

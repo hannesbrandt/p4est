@@ -187,6 +187,10 @@ p6est_lnodes_t     *p6est_lnodes_new (p6est_t * p6est,
                                       p6est_ghost_t * ghost_layer,
                                       int degree);
 
+/** Free all memory in a previously constructed lnodes structure.
+ * \param [in] lnodes       This pointer will be deep freed.  Do no
+ *                          longer use once this function returns.
+ */
 inline void
 p6est_lnodes_destroy (p6est_lnodes_t * lnodes)
 {
@@ -216,15 +220,19 @@ p6est_lnodes_share_owned_begin (sc_array_t * node_data,
   return p8est_lnodes_share_owned_begin (node_data, lnodes);
 }
 
+/** p6est_lnodes_shared_owned_end
+ *
+ * Complete sharing of the owned node data between processes as initiated in
+ * \ref p6est_lnodes_share_owned_begin. */
 inline void
 p6est_lnodes_share_owned_end (p6est_lnodes_buffer_t * buffer)
 {
   p8est_lnodes_share_owned_end (buffer);
 }
 
-/** Equivalent to calling p6est_lnodes_share_owned_end directly after
- * p6est_lnodes_share_owned_begin.  Use if there is no local work that can be
- * done to mask the communication cost.
+/** Equivalent to calling \ref p6est_lnodes_share_owned_end directly after
+ * \ref p6est_lnodes_share_owned_begin.  Use if there is no local work that can
+ * be done to mask the communication cost.
  */
 inline void
 p6est_lnodes_share_owned (sc_array_t * node_data, p6est_lnodes_t * lnodes)
@@ -241,7 +249,7 @@ p6est_lnodes_share_owned (sc_array_t * node_data, p6est_lnodes_t * lnodes)
  * \a buffer->recv_buffers entry as described above.  The user can then perform
  * some arbitrary work that requires the data from all processes that share a
  * node (such as reduce, max, min, etc.).  When the work concludes, the
- * \a buffer should be destroyed with p6est_lnodes_buffer_destroy.
+ * \a buffer should be destroyed with \ref p6est_lnodes_buffer_destroy.
  *
  * Values of \a node_data are not guaranteed to be send, and
  * \a buffer->recv_buffer entries are not guaranteed to be received until
@@ -254,18 +262,22 @@ p6est_lnodes_share_all_begin (sc_array_t * node_data, p6est_lnodes_t * lnodes)
   return p8est_lnodes_share_all_begin (node_data, lnodes);
 }
 
+/** p6est_lnodes_shared_all_end
+ *
+ * Complete sharing of the node data between all relevant processes as initiated
+ * in \ref p6est_lnodes_share_all_begin. */
 inline void
 p6est_lnodes_share_all_end (p6est_lnodes_buffer_t * buffer)
 {
   p8est_lnodes_share_all_end (buffer);
 }
 
-/** Equivalent to calling p6est_lnodes_share_all_end directly after
- * p6est_lnodes_share_all_begin.  Use if there is no local work that can be
+/** Equivalent to calling \ref p6est_lnodes_share_all_end directly after
+ * \ref p6est_lnodes_share_all_begin.  Use if there is no local work that can be
  * done to mask the communication cost.
  * \return          A fully initialized buffer that contains the received data.
  *                  After processing this data, the buffer must be freed with
- *                  p6est_lnodes_buffer_destroy.
+ *                  \ref p6est_lnodes_buffer_destroy.
  */
 inline p6est_lnodes_buffer_t *
 p6est_lnodes_share_all (sc_array_t * node_data, p6est_lnodes_t * lnodes)
@@ -273,6 +285,8 @@ p6est_lnodes_share_all (sc_array_t * node_data, p6est_lnodes_t * lnodes)
   return p8est_lnodes_share_all (node_data, lnodes);
 }
 
+/** Destroy the buffer filled with node data during a call to
+ * \ref p6est_lnodes_share_all_end or \ref p6est_lnodes_share_all.*/
 inline void
 p6est_lnodes_buffer_destroy (p6est_lnodes_buffer_t * buffer)
 {
