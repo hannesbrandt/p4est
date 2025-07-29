@@ -460,6 +460,10 @@ p4est_topidx_hash4 (const p4est_topidx_t * tt)
   return (unsigned) c;
 }
 
+/** Check if an array of p4est_topidx_t is sorted from lowest to highest.
+ * \param [in] t      Array of p4est_topidx_t.
+ * \param [in] length The length of array \a t.
+ * \return            True, iff the array is correctly sorted. */
 /*@unused@*/
 inline int
 p4est_topidx_is_sorted (p4est_topidx_t * t, int length)
@@ -474,6 +478,9 @@ p4est_topidx_is_sorted (p4est_topidx_t * t, int length)
   return 1;
 }
 
+/** Sort an array of p4est_topidx_t from lowest to highest using bubble sort.
+ * \param [in] t      Array of p4est_topidx_t.
+ * \param [in] length The length of array \a t. */
 /*@unused@*/
 inline void
 p4est_topidx_bsort (p4est_topidx_t *t, int length)
@@ -495,6 +502,15 @@ p4est_topidx_bsort (p4est_topidx_t *t, int length)
   P4EST_ASSERT (p4est_topidx_is_sorted (t, length));
 }
 
+/** For a uint64_t global number of elements return the offset of rank p in
+ * their uniform partition.
+ * \param [in] global_num The global number of elements to partition.
+ * \param [in] p          The rank in [0, \a num_procs] for which we compute the
+ *                        offset.
+ * \param [in] num_procs  The total number of processes.
+ * \return                The index of the first element local to rank \a p in
+ *                        in the uniform partition of the range
+ *                        [0, \a global_num - 1]. */
 /*@unused@*/
 inline              uint64_t
 p4est_partition_cut_uint64 (uint64_t global_num, int p, int num_procs)
@@ -521,6 +537,16 @@ p4est_partition_cut_uint64 (uint64_t global_num, int p, int num_procs)
 
   return result;
 }
+
+/** For a p4est_gloidxs_t global number of elements return the offset of rank p
+ * in their uniform partition.
+ * \param [in] global_num The global number of elements to partition.
+ * \param [in] p          The rank in [0, \a num_procs] for which we compute the
+ *                        offset.
+ * \param [in] num_procs  The total number of processes.
+ * \return                The index of the first element local to rank \a p in
+ *                        in the uniform partition of the range
+ *                        [0, \a global_num - 1]. */
 
 /*@unused@*/
 inline              p4est_gloidx_t

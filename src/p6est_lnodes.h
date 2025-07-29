@@ -194,6 +194,22 @@ p6est_lnodes_destroy (p6est_lnodes_t * lnodes)
   p8est_lnodes_destroy (lnodes);
 }
 
+/** p6est_lnodes_share_owned_begin
+ *
+ * \a node_data is a user-defined array of arbitrary type, where each entry
+ * is associated with the \a lnodes local nodes entry of matching index.
+ * For every local nodes entry that is owned by a process
+ * other than the current one, the value in the \a node_data array of the
+ * owning process is written directly into the \a node_data array of the current
+ * process.  Values of \a node_data are not guaranteed to be sent or received
+ * until the \a buffer created by p6est_lnodes_share_owned_begin is passed to
+ * p6est_lnodes_share_owned_end.
+ *
+ * To be memory neutral, the \a buffer created by
+ * p6est_lnodes_share_owned_begin must be destroying with
+ * p6est_lnodes_buffer_destroy (it is not destroyed by
+ * p6est_lnodes_share_owned_end).
+ */
 /*@unused@*/
 inline p6est_lnodes_buffer_t *
 p6est_lnodes_share_owned_begin (sc_array_t * node_data,
@@ -209,6 +225,10 @@ p6est_lnodes_share_owned_end (p6est_lnodes_buffer_t * buffer)
   p8est_lnodes_share_owned_end (buffer);
 }
 
+/** Equivalent to calling p6est_lnodes_share_owned_end directly after
+ * p6est_lnodes_share_owned_begin.  Use if there is no local work that can be
+ * done to mask the communication cost.
+ */
 /*@unused@*/
 inline void
 p6est_lnodes_share_owned (sc_array_t * node_data, p6est_lnodes_t * lnodes)
@@ -216,6 +236,22 @@ p6est_lnodes_share_owned (sc_array_t * node_data, p6est_lnodes_t * lnodes)
   p8est_lnodes_share_owned (node_data, lnodes);
 }
 
+/** p6est_lnodes_share_all_begin
+ *
+ * \a node_data is a user_defined array of arbitrary type, where each entry
+ * is associated with the \a lnodes local nodes entry of matching index.
+ * For every process that shares an entry with the current one, the value in
+ * the \a node_data array of that process is written into a
+ * \a buffer->recv_buffers entry as described above.  The user can then perform
+ * some arbitrary work that requires the data from all processes that share a
+ * node (such as reduce, max, min, etc.).  When the work concludes, the
+ * \a buffer should be destroyed with p6est_lnodes_buffer_destroy.
+ *
+ * Values of \a node_data are not guaranteed to be send, and
+ * \a buffer->recv_buffer entries are not guaranteed to be received until
+ * the \a buffer created by p6est_lnodes_share_all_begin is passed to
+ * p6est_lnodes_share_all_end.
+ */
 /*@unused@*/
 inline p6est_lnodes_buffer_t *
 p6est_lnodes_share_all_begin (sc_array_t * node_data, p6est_lnodes_t * lnodes)
@@ -230,6 +266,13 @@ p6est_lnodes_share_all_end (p6est_lnodes_buffer_t * buffer)
   p8est_lnodes_share_all_end (buffer);
 }
 
+/** Equivalent to calling p6est_lnodes_share_all_end directly after
+ * p6est_lnodes_share_all_begin.  Use if there is no local work that can be
+ * done to mask the communication cost.
+ * \return          A fully initialized buffer that contains the received data.
+ *                  After processing this data, the buffer must be freed with
+ *                  p6est_lnodes_buffer_destroy.
+ */
 /*@unused@*/
 inline p6est_lnodes_buffer_t *
 p6est_lnodes_share_all (sc_array_t * node_data, p6est_lnodes_t * lnodes)
@@ -244,6 +287,7 @@ p6est_lnodes_buffer_destroy (p6est_lnodes_buffer_t * buffer)
   p8est_lnodes_buffer_destroy (buffer);
 }
 
+/** Return a pointer to a lnodes_rank array element indexed by a int. */
 /*@unused@*/
 inline p6est_lnodes_rank_t *
 p6est_lnodes_rank_array_index_int (sc_array_t * array, int it)
@@ -251,6 +295,7 @@ p6est_lnodes_rank_array_index_int (sc_array_t * array, int it)
   return p8est_lnodes_rank_array_index_int (array, it);
 }
 
+/** Return a pointer to a lnodes_rank array element indexed by a size_t. */
 /*@unused@*/
 inline p6est_lnodes_rank_t *
 p6est_lnodes_rank_array_index (sc_array_t * array, size_t it)
@@ -258,6 +303,7 @@ p6est_lnodes_rank_array_index (sc_array_t * array, size_t it)
   return p8est_lnodes_rank_array_index (array, it);
 }
 
+/** Compute the global number of a local node number */
 /*@unused@*/
 inline              p4est_gloidx_t
 p6est_lnodes_global_index (p6est_lnodes_t * lnodes, p4est_locidx_t lidx)

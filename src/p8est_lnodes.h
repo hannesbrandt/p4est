@@ -413,7 +413,7 @@ p8est_lnodes_buffer_t *p8est_lnodes_share_all_begin (sc_array_t * node_data,
 void                p8est_lnodes_share_all_end (p8est_lnodes_buffer_t *
                                                 buffer);
 
-/** Equivalend to calling p8est_lnodes_share_all_end directly after
+/** Equivalent to calling p8est_lnodes_share_all_end directly after
  * p8est_lnodes_share_all_begin.  Use if there is no local work that can be
  * done to mask the communication cost.
  * \return          A fully initialized buffer that contains the received data.

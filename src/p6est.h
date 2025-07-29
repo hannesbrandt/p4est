@@ -604,6 +604,8 @@ p2est_quadrant_list_pop (sc_list_t * list)
     (q)->p.piggy3.which_tree = (p4est_topidx_t) ((l) - (f)); \
   } while (0);
 
+/** Alloc the user data of a layer and initialize it, if a \a init_fn is
+ * passed. */
 /*@unused@*/
 inline void
 p6est_layer_init_data (p6est_t *p6est, p4est_topidx_t which_tree,
@@ -621,6 +623,7 @@ p6est_layer_init_data (p6est_t *p6est, p4est_topidx_t which_tree,
   }
 }
 
+/** Free the user data of a layer. */
 /*@unused@*/
 inline void
 p6est_layer_free_data (p6est_t *p6est, p2est_quadrant_t *layer)

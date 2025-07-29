@@ -473,7 +473,9 @@ p4est_t            *p4est_load (const char *filename, sc_MPI_Comm mpicomm,
                                 p4est_connectivity_t ** connectivity);
 
 /** Return a pointer to an array element indexed by a p4est_topidx_t.
- * \param [in] index needs to be in [0]..[elem_count-1].
+ * \param [in] it               needs to be in [0]..[elem_count-1].
+ * \param [in] array            Valid array, commonly the trees array of a
+ *                              p4est.
  */
 /*@unused@*/
 inline p4est_tree_t *
