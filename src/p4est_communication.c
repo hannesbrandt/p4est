@@ -1617,7 +1617,7 @@ p4est_init_points_context (p4est_points_context_t *c, sc_array_t *points)
   c->num_known = points->elem_count;
   c->num_respon = points->elem_count;
   c->num_unowned = 0;
-};
+}
 
 /** Push point \a pi into the send buffer for \a receiver */
 static void
@@ -2314,4 +2314,4 @@ p4est_destroy_points_context (p4est_points_context_t *c)
 {
   P4EST_ASSERT (c->points != NULL);
   sc_array_destroy_null (&c->points);
-};
+}
