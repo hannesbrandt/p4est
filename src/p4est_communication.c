@@ -1548,7 +1548,7 @@ destroy_transfer_meta (p4est_transfer_meta_t *meta, int num_procs)
 typedef struct p4est_transfer_internal
 {
   /* point-quadrant intersection function */
-  p4est_intersect_t   intersect;
+  p4est_intersect_t   intersect_fn;
   /* stores the last process we detected as intersecting each point */
   int                *last_procs;
   /* communication metadata */
@@ -1683,9 +1683,10 @@ transfer_search_point (p4est_t *p4est, p4est_topidx_t which_tree,
   p4est->user_pointer = internal->user_pointer;
 
   /* check if point intersects the quadrant */
-  intersection_found = internal->intersect (p4est, which_tree, quadrant,
-                                            pfirst, plast,
-                                            sc_array_index (c->points, pi));
+  intersection_found = internal->intersect_fn (p4est, which_tree, quadrant,
+                                               pfirst, plast,
+                                               sc_array_index (c->points,
+                                                               pi));
 
   /* restore our internal context */
   p4est->user_pointer = internal;
@@ -2003,7 +2004,8 @@ static int
 
 int
 p4est_transfer_search (p4est_t *p4est, p4est_points_context_t *c,
-                       p4est_intersect_t intersect, int save_unowned)
+                       p4est_intersect_t intersect_fn, int max_weight,
+                       p4est_point_weight_t point_weight_fn, int save_unowned)
 {
   int                 err;
 
@@ -2014,7 +2016,7 @@ p4est_transfer_search (p4est_t *p4est, p4est_points_context_t *c,
   /* Assign context information */
   P4EST_ASSERT (p4est_points_context_is_valid (c));
   internal.c = c;
-  internal.intersect = intersect;
+  internal.intersect_fn = intersect_fn;
   internal.p4est = p4est;
   internal.mpicomm = p4est->mpicomm;
   internal.save_unowned = save_unowned;
@@ -2047,7 +2049,9 @@ p4est_transfer_search_gfx (const p4est_gloidx_t *gfq,
                            void *user_pointer,
                            sc_MPI_Comm mpicomm,
                            p4est_points_context_t *c,
-                           p4est_intersect_t intersect, int save_unowned)
+                           p4est_intersect_t intersect_fn, int max_weight,
+                           p4est_point_weight_t point_weight_fn,
+                           int save_unowned)
 {
   /* Init internal context */
   p4est_transfer_internal_t internal;
@@ -2056,7 +2060,7 @@ p4est_transfer_search_gfx (const p4est_gloidx_t *gfq,
   /* Assign context information */
   P4EST_ASSERT (p4est_points_context_is_valid (c));
   internal.c = c;
-  internal.intersect = intersect;
+  internal.intersect_fn = intersect_fn;
   internal.user_pointer = user_pointer;
   internal.mpicomm = mpicomm;
   internal.save_unowned = save_unowned;
@@ -2080,7 +2084,9 @@ p4est_transfer_search_gfp (const p4est_quadrant_t *gfp, int nmemb,
                            void *user_pointer,
                            sc_MPI_Comm mpicomm,
                            p4est_points_context_t *c,
-                           p4est_intersect_t intersect, int save_unowned)
+                           p4est_intersect_t intersect_fn, int max_weight,
+                           p4est_point_weight_t point_weight_fn,
+                           int save_unowned)
 {
   /* Init internal context */
   p4est_transfer_internal_t internal;
@@ -2089,7 +2095,7 @@ p4est_transfer_search_gfp (const p4est_quadrant_t *gfp, int nmemb,
   /* Assign context information */
   P4EST_ASSERT (p4est_points_context_is_valid (c));
   internal.c = c;
-  internal.intersect = intersect;
+  internal.intersect_fn = intersect_fn;
   internal.user_pointer = user_pointer;
   internal.mpicomm = mpicomm;
   internal.save_unowned = save_unowned;

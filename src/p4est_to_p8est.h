@@ -178,6 +178,7 @@
 #define p4est_transfer_context_t        p8est_transfer_context_t
 #define p4est_points_context_t          p8est_points_context_t
 #define p4est_intersect_t               p8est_intersect_t
+#define p4est_point_weight_t            p8est_point_weight_t
 #define p4est_mesh_t                    p8est_mesh_t
 #define p4est_mesh_face_neighbor_t      p8est_mesh_face_neighbor_t
 #define p4est_wrap_t                    p8est_wrap_t
