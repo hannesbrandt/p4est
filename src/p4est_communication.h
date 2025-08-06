@@ -583,20 +583,29 @@ void                p4est_transfer_items_end (p4est_transfer_context_t * tc);
 void                p4est_transfer_end (p4est_transfer_context_t * tc);
 
 /** Callback function for \ref p4est_transfer_search, as well as its variants
- * \ref p4est_transfer_search_gfx and \ref p4est_transfer_search_gfp.
+ * \ref p4est_transfer_search_gfx and \ref p4est_transfer_search_gfp. It will
+ * be used in a partition search, similar to a \ref p4est_search_partition_t.
  *
- * \param[in] p4est In the versions of transfer search not requiring an
- *                  explicit p4est this is a dummy p4est where only the user
- *                  pointer is initialized.
- * \param[in] which_tree Tree containing quadrant
- * \param[in] quadrant The quadrant
- * \param[in] point The point
- * \return True if \a point intersects \a quadrant.
+ * \param[in] p4est         In the versions of transfer search not requiring an
+ *                          explicit p4est this is a dummy p4est where only the
+ *                          user pointer is initialized.
+ * \param[in] which_tree    Number of the tree containing \a quadrant.
+ * \param[in] quadrant      This quadrant is not from local forest storage,
+ *                          and its user data is undefined.  It represents
+ *                          the branch of the forest in the top-down recursion.
+ * \param [in] pfirst       The lowest processor that owns part of \b quadrant.
+ *                          Guaranteed to be non-empty.
+ * \param [in] plast        The highest processor that owns part of \b quadrant.
+ *                          Guaranteed to be non-empty.  If this is equal to
+ *                          \b pfirst, then the recursion will stop for
+ *                          \b quadrant's branch after this function returns.
+ * \param[in] point         Pointer to a user-defined point object.
+ * \return True, if \a point intersects \a quadrant.
  */
 typedef int         (*p4est_intersect_t) (p4est_t *p4est,
                                           p4est_topidx_t which_tree,
                                           p4est_quadrant_t *quadrant,
-                                          void *point);
+                                          int pfirst, int plast, void *point);
 
 /** This structure is used with \ref p4est_transfer_search to maintain a
  * distributed collection of points, so that the points known to a process

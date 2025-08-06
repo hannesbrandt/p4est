@@ -1684,6 +1684,7 @@ transfer_search_point (p4est_t *p4est, p4est_topidx_t which_tree,
 
   /* check if point intersects the quadrant */
   intersection_found = internal->intersect (p4est, which_tree, quadrant,
+                                            pfirst, plast,
                                             sc_array_index (c->points, pi));
 
   /* restore our internal context */
