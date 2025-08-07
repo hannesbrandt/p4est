@@ -1484,15 +1484,17 @@ p4est_transfer_items_end (p4est_transfer_context_t *tc)
 typedef struct p4est_transfer_meta
 {
   /* in the following p refers to the local rank, and q any rank */
-/* data used for sending */
+  /* data used for sending */
   /* number of points that p receives in this iteration */
   size_t              num_incoming;
   /* q -> {points that p is sending to q} */
-  sc_array_t        **send_buffers;
+  sc_array_t         *send_buffers;
   /* ranks receiving points from p */
   sc_array_t         *receivers;
   /* number of points each receiver gets from p */
   sc_array_t         *recvs_counts;
+  /* mark, if we ecountered a message size error during setup */
+  int                 errsend;
 
   /* data used for receiving */
   /* ranks sending points to p */
@@ -1512,8 +1514,10 @@ init_transfer_meta (p4est_transfer_meta_t *meta)
 }
 
 static void
-destroy_transfer_meta (p4est_transfer_meta_t *meta, int num_procs)
+destroy_transfer_meta (p4est_transfer_meta_t *meta)
 {
+  size_t              ibz;
+
   /* destroy send data */
   if (meta->receivers != NULL) {
     sc_array_destroy_null (&meta->receivers);
@@ -1522,12 +1526,11 @@ destroy_transfer_meta (p4est_transfer_meta_t *meta, int num_procs)
     sc_array_destroy_null (&meta->recvs_counts);
   }
   if (meta->send_buffers != NULL) {
-    for (int q = 0; q < num_procs; q++) {
-      if (meta->send_buffers[q] != NULL) {
-        sc_array_destroy_null (&meta->send_buffers[q]);
-      }
+    for (ibz = 0; ibz < meta->send_buffers->elem_count; ibz++) {
+      sc_array_reset ((sc_array_t *)
+                      sc_array_index (meta->send_buffers, ibz));
     }
-    P4EST_FREE (meta->send_buffers);
+    sc_array_destroy_null (&meta->send_buffers);
   }
 
   /* destroy receive data */
@@ -1629,16 +1632,44 @@ push_to_send_buffer (p4est_transfer_meta_t *meta,
                      p4est_points_context_t *c,
                      p4est_locidx_t pi, int receiver)
 {
+  size_t              bcount;
   size_t              point_size = c->points->elem_size;
+  sc_array_t         *b;
+  int                 rank;
 
-  /* initialize receiver send buffer if it not already initialized */
-  if (meta->send_buffers[receiver] == NULL) {
-    meta->send_buffers[receiver] = sc_array_new (point_size);
+  /* if we have a new receiver, push a new send buffer */
+  bcount = meta->send_buffers->elem_count;
+  b = NULL;
+  if (bcount > 0) {
+    b = (sc_array_t *) sc_array_index (meta->send_buffers, bcount - 1);
+    rank = *(int *) sc_array_index (meta->receivers, bcount - 1);
+    P4EST_ASSERT (rank <= receiver);
+    P4EST_ASSERT (b->elem_count > 0);
+  }
+  if (bcount > 0 && rank < receiver) {
+    /* evaluate the current send buffer, before pushing the next one */
+    if (b->elem_count * b->elem_size > (size_t) INT_MAX) {
+      P4EST_LERRORF ("Message of %lld points for rank %d is too large.\n",
+                     (long long) b->elem_count, rank);
+      meta->errsend = 1;
+    }
+  }
+  if (bcount == 0 || rank < receiver) {
+    /* push a new send buffer */
+    b = sc_array_push (meta->send_buffers);
+    sc_array_init (b, point_size);
+    bcount++;
+
+    /* store the rank of the receiver */
+    *(int *) sc_array_push (meta->receivers) = receiver;
+
+    /* init a new receive count */
+    *(size_t *) sc_array_push (meta->recvs_counts) = 0;
   }
 
   /* add point to send buffer */
-  memcpy (sc_array_push (meta->send_buffers[receiver]),
-          sc_array_index (c->points, pi), point_size);
+  memcpy (sc_array_push (b), sc_array_index (c->points, pi), point_size);
+  *(size_t *) sc_array_index (meta->recvs_counts, bcount - 1) += 1;
 }
 
 /** Point callback for \ref p4est_search_partition in compute_send_buffers
@@ -1749,8 +1780,7 @@ transfer_search_point (p4est_t *p4est, p4est_topidx_t which_tree,
  * \param[in] num_procs number of MPI processes
  */
 static void
-compute_send_buffers (p4est_transfer_internal_t *internal,
-                      int num_procs, int rank)
+compute_send_buffers (p4est_transfer_internal_t *internal)
 {
   sc_array_t         *search_objects;
   p4est_points_context_t *c = internal->c;
@@ -1767,14 +1797,12 @@ compute_send_buffers (p4est_transfer_internal_t *internal,
   memset (internal->last_procs, -1, c->num_respon * sizeof (int));
 
   /* initialize index of outgoing message buffers */
-  own->send_buffers = P4EST_ALLOC (sc_array_t *, num_procs);
-  resp->send_buffers = P4EST_ALLOC (sc_array_t *, num_procs);
-
-  /* initialize outgoing message buffers to NULL */
-  for (int q = 0; q < num_procs; q++) {
-    own->send_buffers[q] = NULL;
-    resp->send_buffers[q] = NULL;
-  }
+  own->send_buffers = sc_array_new (sizeof (sc_array_t));
+  own->receivers = sc_array_new (sizeof (int));
+  own->recvs_counts = sc_array_new (sizeof (size_t));
+  resp->send_buffers = sc_array_new (sizeof (sc_array_t));
+  resp->receivers = sc_array_new (sizeof (int));
+  resp->recvs_counts = sc_array_new (sizeof (size_t));
 
   /* set up search objects for partition search */
   search_objects =
@@ -1784,7 +1812,6 @@ compute_send_buffers (p4est_transfer_internal_t *internal,
   }
 
   /* add points to the relevant send buffers (by partition search) */
-
   if (internal->p4est != NULL) {
     /* We are running p4est_transfer_search */
     /* Run search to add points to buffers */
@@ -1822,55 +1849,6 @@ compute_send_buffers (p4est_transfer_internal_t *internal,
   P4EST_FREE (internal->last_procs);
 }
 
-/** Update communication metadata with which processes p is sending points to
- *  and how many points are being sent to each of these.
- *
- *  The output is stored in the fields meta->receivers and meta->recvs_counts.
- *  We assume comm->send_buffers is already populated.
- *
- * \param[in,out] meta communication metadata
- * \param[in] point_size byte size of points
- * \param[in] num_procs number of mpi processes
- * \param[in] rank rank of the local process
- * \return 0 if no error occured. 1 if a message being sent is too large
- */
-static int
-compute_receivers (p4est_transfer_meta_t *meta,
-                   size_t point_size, int num_procs, int rank)
-{
-  int                 err = 0;
-
-  /* initialize receivers and receiver counts */
-  meta->receivers = sc_array_new (sizeof (int));
-  meta->recvs_counts = sc_array_new (sizeof (size_t));
-
-  /* compute receivers and counts */
-  for (int q = 0; q < num_procs; q++) {
-    if (meta->send_buffers[q] != NULL) {
-      /* check that the number of points communicated will not overflow int */
-      if (meta->send_buffers[q]->elem_count * point_size > (size_t) INT_MAX) {
-        P4EST_LERRORF ("Message of %lld points from rank %d to rank %d is "
-                       "too large.\n",
-                       (long long) meta->send_buffers[q]->elem_count, rank,
-                       q);
-        err = 1;
-        break;
-      }
-
-      /* add q to receivers */
-      *(int *) sc_array_push (meta->receivers) = q;
-
-      /* record how many points p is sending to q */
-      *(size_t *) sc_array_push (meta->recvs_counts) =
-        meta->send_buffers[q]->elem_count;
-    }
-  }
-  P4EST_ASSERT (meta->receivers->elem_count ==
-                meta->recvs_counts->elem_count);
-
-  return err;
-}
-
 /** Post non-blocking sends for points in the given communication data.
  *
  * To each rank q in meta->receivers we send the points stored at
@@ -1888,6 +1866,7 @@ post_sends (p4est_transfer_meta_t *meta,
   int                 mpiret;
   int                 q;
   int                 rank;
+  sc_array_t         *b;
 
   /* get rank */
   mpiret = sc_MPI_Comm_rank (mpicomm, &rank);
@@ -1899,8 +1878,8 @@ post_sends (p4est_transfer_meta_t *meta,
 
     if (q != rank) {
       /* post non-blocking send of points to q */
-      mpiret = sc_MPI_Isend (sc_array_index (meta->send_buffers[q], 0),
-                             meta->send_buffers[q]->elem_count * point_size,
+      b = (sc_array_t *) sc_array_index_int (meta->send_buffers, i);
+      mpiret = sc_MPI_Isend (b->array, b->elem_count * point_size,
                              sc_MPI_BYTE, q, 0, mpicomm, req + i);
       SC_CHECK_MPI (mpiret);
     }
@@ -1960,6 +1939,8 @@ post_receives (p4est_transfer_meta_t *meta,
   int                 q;
   int                 rank;
   void               *self_dest = NULL;
+  size_t              ibz;
+  sc_array_t         *b;
 
   /* get rank */
   mpiret = sc_MPI_Comm_rank (mpicomm, &rank);
@@ -1990,8 +1971,13 @@ post_receives (p4est_transfer_meta_t *meta,
   /* if the message to ourself was non-empty */
   if (self_dest != NULL) {
     /* copy message to self manually rather than post receive request */
-    memcpy (self_dest, sc_array_index (meta->send_buffers[rank], 0),
-            meta->send_buffers[rank]->elem_count * point_size);
+    ibz = 0;
+    while (*(int *) sc_array_index (meta->receivers, ibz) < rank) {
+      ibz++;                    /* search for index of rank in the receivers array */
+    }
+    P4EST_ASSERT (*(int *) sc_array_index (meta->receivers, ibz) == rank);
+    b = (sc_array_t *) sc_array_index (meta->send_buffers, ibz);
+    memcpy (self_dest, b->array, b->elem_count * point_size);
   }
 }
 
@@ -2169,16 +2155,14 @@ p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
   SC_CHECK_MPI (mpiret);
 
   /* use search_partition to put points in appropriate send buffers */
-  compute_send_buffers (internal, num_procs, rank);
-
   /* record which processes p is sending points to and how many points each
      process receives */
   /* note: an error is recorded here if p is attempting to send more than
      INT_MAX bytes in an own or resp message to another process. We defer
      synchronising these errors until just before calling sc_notify_ext
      to avoid creating an unnecessary synchronisation point */
-  errsend = compute_receivers (&resp, point_size, num_procs, rank);
-  errsend = errsend || compute_receivers (&own, point_size, num_procs, rank);
+  compute_send_buffers (internal);
+  errsend = resp.errsend || own.errsend;
 
   /* if messages from this process are valid then continue optimistically */
   if (!errsend) {
@@ -2213,8 +2197,8 @@ p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
     if (internal->unowned_points != NULL) {
       sc_array_destroy_null (&internal->unowned_points);
     }
-    destroy_transfer_meta (&resp, num_procs);
-    destroy_transfer_meta (&own, num_procs);
+    destroy_transfer_meta (&resp);
+    destroy_transfer_meta (&own);
     P4EST_FREE (send_req);
 
     /* return failure */
@@ -2261,8 +2245,8 @@ p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
     if (internal->unowned_points != NULL) {
       sc_array_destroy_null (&internal->unowned_points);
     }
-    destroy_transfer_meta (&resp, num_procs);
-    destroy_transfer_meta (&own, num_procs);
+    destroy_transfer_meta (&resp);
+    destroy_transfer_meta (&own);
     P4EST_FREE (send_req);
 
     /* return failure */
@@ -2313,8 +2297,8 @@ p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
   if (internal->unowned_points != NULL) {
     sc_array_destroy_null (&internal->unowned_points);
   }
-  destroy_transfer_meta (&resp, num_procs);
-  destroy_transfer_meta (&own, num_procs);
+  destroy_transfer_meta (&resp);
+  destroy_transfer_meta (&own);
   P4EST_FREE (send_req);
   P4EST_FREE (recv_req);
 
