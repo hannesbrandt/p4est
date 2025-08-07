@@ -1563,6 +1563,10 @@ typedef struct p4est_transfer_internal
   /* p4est data - NULL if running gfx/gfp */
   p4est_t            *p4est;
 
+  /* weight computation */
+  int                 max_weigth;       /* the maximum allowed weight per process */
+  p4est_point_weight_t point_weight_fn; /* callback to compute point weights */
+
   /* data needed if we do not have a full p4est */
   /* global first quadrant array - NULL if running gfp */
   const p4est_gloidx_t *gfq;
@@ -1627,7 +1631,7 @@ push_to_send_buffer (p4est_transfer_meta_t *meta,
 {
   size_t              point_size = c->points->elem_size;
 
-  /* initialise receiver send buffer if it not already initialised */
+  /* initialize receiver send buffer if it not already initialized */
   if (meta->send_buffers[receiver] == NULL) {
     meta->send_buffers[receiver] = sc_array_new (point_size);
   }
@@ -1755,18 +1759,18 @@ compute_send_buffers (p4est_transfer_internal_t *internal,
   p4est_locidx_t      il;
   const size_t        point_size = c->points->elem_size;
 
-  /* Initialise last_procs to -1 to signify no points have been added to send
+  /* Initialize last_procs to -1 to signify no points have been added to send
      buffers. */
   /* Here we are relying on the fact that the char -1 is 11111111 in bits,
      and so the resulting int array will be filled with -1. */
   internal->last_procs = P4EST_ALLOC (int, c->num_respon);
   memset (internal->last_procs, -1, c->num_respon * sizeof (int));
 
-  /* initialise index of outgoing message buffers */
+  /* initialize index of outgoing message buffers */
   own->send_buffers = P4EST_ALLOC (sc_array_t *, num_procs);
   resp->send_buffers = P4EST_ALLOC (sc_array_t *, num_procs);
 
-  /* initialise outgoing message buffers to NULL */
+  /* initialize outgoing message buffers to NULL */
   for (int q = 0; q < num_procs; q++) {
     own->send_buffers[q] = NULL;
     resp->send_buffers[q] = NULL;
@@ -2017,6 +2021,8 @@ p4est_transfer_search (p4est_t *p4est, p4est_points_context_t *c,
   P4EST_ASSERT (p4est_points_context_is_valid (c));
   internal.c = c;
   internal.intersect_fn = intersect_fn;
+  internal.max_weigth = max_weight;
+  internal.point_weight_fn = point_weight_fn;
   internal.p4est = p4est;
   internal.mpicomm = p4est->mpicomm;
   internal.save_unowned = save_unowned;
@@ -2061,6 +2067,8 @@ p4est_transfer_search_gfx (const p4est_gloidx_t *gfq,
   P4EST_ASSERT (p4est_points_context_is_valid (c));
   internal.c = c;
   internal.intersect_fn = intersect_fn;
+  internal.max_weigth = max_weight;
+  internal.point_weight_fn = point_weight_fn;
   internal.user_pointer = user_pointer;
   internal.mpicomm = mpicomm;
   internal.save_unowned = save_unowned;
@@ -2096,6 +2104,8 @@ p4est_transfer_search_gfp (const p4est_quadrant_t *gfp, int nmemb,
   P4EST_ASSERT (p4est_points_context_is_valid (c));
   internal.c = c;
   internal.intersect_fn = intersect_fn;
+  internal.max_weigth = max_weight;
+  internal.point_weight_fn = point_weight_fn;
   internal.user_pointer = user_pointer;
   internal.mpicomm = mpicomm;
   internal.save_unowned = save_unowned;
@@ -2177,7 +2187,7 @@ p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
     num_send_reqs =
       (int) (own.receivers->elem_count + resp.receivers->elem_count);
 
-    /* initialise request array for outgoing messages */
+    /* initialize request array for outgoing messages */
     send_req = P4EST_ALLOC (sc_MPI_Request, num_send_reqs);
 
     /* post non-blocking sends */
@@ -2275,7 +2285,7 @@ p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
   /* total number of messages received */
   num_recv_reqs = (int) (own.senders->elem_count + resp.senders->elem_count);
 
-  /* initialise request array for incoming messages */
+  /* initialize request array for incoming messages */
   recv_req = P4EST_ALLOC (sc_MPI_Request, num_recv_reqs);
 
   /* post non-blocking receives */

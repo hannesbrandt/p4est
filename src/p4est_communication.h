@@ -758,7 +758,8 @@ int                 p4est_transfer_search (p4est_t *p4est,
  * \param [in] gfp          Partition position to traverse.  Length \a nmemb + 1.
  * \param [in] nmemb        Number of processors encoded in \a gfq (plus one).
  * \param [in] num_trees    Tree number must match the contents of \a gfq.
- * \param [in] user_pointer Passed to the intersection callback.
+ * \param [in] user_pointer Passed to the intersection and the point weight
+ *                          callback.
  * \param [in] mpicomm      Function is collective over the communicator.
  * \param [in,out] c        Points and propagation responsibilities. The
  *                          array \a c.points is destroyed and reallocated,
@@ -796,7 +797,8 @@ int                 p4est_transfer_search_gfx (const p4est_gloidx_t *gfq,
  * \param [in] gfp          Partition position to traverse.  Length \a nmemb + 1.
  * \param [in] nmemb        Number of processors encoded in \a gfq (plus one).
  * \param [in] num_trees    Tree number must match the contents of \a gfq.
- * \param [in] user_pointer Passed to the intersection callback.
+ * \param [in] user_pointer Passed to the intersection and the point weight
+ *                          callback.
  * \param [in] mpicomm      Function is collective over the communicator.
  * \param [in,out] c        Points and propagation responsibilities. The
  *                          array \a c.points is destroyed and reallocated,
