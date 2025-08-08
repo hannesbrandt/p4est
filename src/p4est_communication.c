@@ -1495,6 +1495,8 @@ typedef struct p4est_transfer_meta
   sc_array_t         *receivers;
   /* number of points each receiver gets from p */
   sc_array_t         *recvs_counts;
+  /* weight of the points each receiver gets from p */
+  sc_array_t         *recv_weights;
   /* mark, if we ecountered a message size error during setup */
   int                 errsend;
 
@@ -1519,6 +1521,7 @@ init_transfer_meta (p4est_transfer_meta_t *meta, size_t point_size)
   meta->send_buffers = sc_array_new (sizeof (sc_array_t));
   meta->receivers = sc_array_new (sizeof (int));
   meta->recvs_counts = sc_array_new (sizeof (size_t));
+  meta->recv_weights = sc_array_new (sizeof (size_t));
   meta->senders = sc_array_new (sizeof (int));
   meta->senders_counts = sc_array_new (sizeof (size_t));
 }
@@ -1534,6 +1537,9 @@ destroy_transfer_meta (p4est_transfer_meta_t *meta)
   }
   if (meta->recvs_counts != NULL) {
     sc_array_destroy_null (&meta->recvs_counts);
+  }
+  if (meta->recv_weights != NULL) {
+    sc_array_destroy_null (&meta->recv_weights);
   }
   if (meta->send_buffers != NULL) {
     for (ibz = 0; ibz < meta->send_buffers->elem_count; ibz++) {
@@ -1640,6 +1646,7 @@ p4est_init_points_context (p4est_points_context_t *c, sc_array_t *points)
 static void
 push_to_send_buffer (p4est_transfer_meta_t *meta,
                      p4est_points_context_t *c,
+                     p4est_transfer_internal_t *internal,
                      p4est_locidx_t pi, int receiver)
 {
   size_t              bcount;
@@ -1672,14 +1679,23 @@ push_to_send_buffer (p4est_transfer_meta_t *meta,
     /* store the rank of the receiver */
     *(int *) sc_array_push (meta->receivers) = receiver;
 
-    /* init a new receive count */
+    /* init a new receive count and weight */
     *(size_t *) sc_array_push (meta->recvs_counts) = 0;
+    if (internal->max_weigth >= 0) {
+      /* we only need to track weights, if a maximum weight was specified */
+      *(size_t *) sc_array_push (meta->recv_weights) = 0;
+    }
   }
 
   /* add point to send buffer */
   memcpy (sc_array_push (b), sc_array_index (c->points, pi),
           meta->point_size);
   *(size_t *) sc_array_index (meta->recvs_counts, bcount - 1) += 1;
+  if (internal->max_weigth >= 0) {
+    /* add the points' weight to the total weight for the receiver */
+    *(size_t *) sc_array_index (meta->recv_weights, bcount - 1) +=
+      internal->point_weight_fn (sc_array_index (c->points, pi), internal->user_pointer);
+  }
 }
 
 /** Point callback for \ref p4est_search_partition in compute_send_buffers
@@ -1773,11 +1789,11 @@ transfer_search_point (p4est_t *p4est, p4est_topidx_t which_tree,
   if (last_proc == -1) {
     /* first process intersecting point should own it and be responsible for
        its propagation */
-    push_to_send_buffer (resp, c, pi, pfirst);
+    push_to_send_buffer (resp, c, internal, pi, pfirst);
   }
   else {
     /* process should own point but not be responsible for its propagation */
-    push_to_send_buffer (own, c, pi, pfirst);
+    push_to_send_buffer (own, c, internal, pi, pfirst);
   }
 
   /* end recursion */
