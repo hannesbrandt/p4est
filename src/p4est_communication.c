@@ -1514,6 +1514,13 @@ init_transfer_meta (p4est_transfer_meta_t *meta, size_t point_size)
   /* initialize the whole structure including compiler padding */
   memset (meta, 0, sizeof (*meta));
   meta->point_size = point_size;
+
+  /* prepare arrays, so that we can push to them directly later */
+  meta->send_buffers = sc_array_new (sizeof (sc_array_t));
+  meta->receivers = sc_array_new (sizeof (int));
+  meta->recvs_counts = sc_array_new (sizeof (size_t));
+  meta->senders = sc_array_new (sizeof (int));
+  meta->senders_counts = sc_array_new (sizeof (size_t));
 }
 
 static void
@@ -1787,8 +1794,6 @@ compute_send_buffers (p4est_transfer_internal_t *internal)
 {
   sc_array_t         *search_objects;
   p4est_points_context_t *c = internal->c;
-  p4est_transfer_meta_t *resp = internal->resp;
-  p4est_transfer_meta_t *own = internal->own;
   p4est_locidx_t      il;
 
   /* Initialize last_procs to -1 to signify no points have been added to send
@@ -1797,14 +1802,6 @@ compute_send_buffers (p4est_transfer_internal_t *internal)
      and so the resulting int array will be filled with -1. */
   internal->last_procs = P4EST_ALLOC (int, c->num_respon);
   memset (internal->last_procs, -1, c->num_respon * sizeof (int));
-
-  /* initialize index of outgoing message buffers */
-  own->send_buffers = sc_array_new (sizeof (sc_array_t));
-  own->receivers = sc_array_new (sizeof (int));
-  own->recvs_counts = sc_array_new (sizeof (size_t));
-  resp->send_buffers = sc_array_new (sizeof (sc_array_t));
-  resp->receivers = sc_array_new (sizeof (int));
-  resp->recvs_counts = sc_array_new (sizeof (size_t));
 
   /* set up search objects for partition search */
   search_objects =
@@ -1841,7 +1838,7 @@ compute_send_buffers (p4est_transfer_internal_t *internal)
       if (internal->last_procs[il] == -1) {
         /* add point to unowned points buffer */
         memcpy (sc_array_push (internal->unowned_points),
-                sc_array_index (c->points, il), resp->point_size);
+                sc_array_index (c->points, il), c->points->elem_size);
       }
     }
   }
@@ -2175,12 +2172,6 @@ p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
     /* post non-blocking sends */
     post_sends (&resp, mpicomm, send_req);
     post_sends (&own, mpicomm, send_req + resp.receivers->elem_count);
-
-    /* initialize buffers for sc_notify_ext */
-    own.senders = sc_array_new (sizeof (int));
-    resp.senders = sc_array_new (sizeof (int));
-    own.senders_counts = sc_array_new (sizeof (size_t));
-    resp.senders_counts = sc_array_new (sizeof (size_t));
   }
 
   /* synchronise possible message errors */
