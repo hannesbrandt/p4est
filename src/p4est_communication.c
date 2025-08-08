@@ -2159,6 +2159,12 @@ p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
   compute_send_buffers (internal);
   errsend = resp.errsend || own.errsend;
 
+  /* sanity checks */
+  P4EST_ASSERT (resp.receivers->elem_count == resp.recvs_counts->elem_count);
+  P4EST_ASSERT (resp.receivers->elem_count == resp.send_buffers->elem_count);
+  P4EST_ASSERT (own.receivers->elem_count == own.recvs_counts->elem_count);
+  P4EST_ASSERT (own.receivers->elem_count == own.send_buffers->elem_count);
+
   /* if messages from this process are valid then continue optimistically */
   if (!errsend) {
     /* total number of messages this process will send */
