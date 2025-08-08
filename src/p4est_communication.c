@@ -1480,6 +1480,12 @@ p4est_transfer_items_end (p4est_transfer_context_t *tc)
   p4est_transfer_end (tc);
 }
 
+typedef struct p4est_transfer_info
+{
+  size_t              count;
+  size_t              weight;
+} p4est_transfer_info_t;
+
 /** Communication metadata for \ref p4est_transfer_search. */
 typedef struct p4est_transfer_meta
 {
@@ -1493,18 +1499,16 @@ typedef struct p4est_transfer_meta
   sc_array_t         *send_buffers;
   /* ranks receiving points from p */
   sc_array_t         *receivers;
-  /* number of points each receiver gets from p */
-  sc_array_t         *recvs_counts;
-  /* weight of the points each receiver gets from p */
-  sc_array_t         *recv_weights;
+  /* number and weight of points each receiver gets from p */
+  sc_array_t         *recvs_info;
   /* mark, if we ecountered a message size error during setup */
   int                 errsend;
 
   /* data used for receiving */
   /* ranks sending points to p */
   sc_array_t         *senders;
-  /* number of points p gets from each sender */
-  sc_array_t         *senders_counts;
+  /* number and weight of points p gets from each sender */
+  sc_array_t         *sends_info;
   /* q -> byte offset to receive message from q at */
   size_t             *offsets;
 } p4est_transfer_meta_t;
@@ -1520,10 +1524,9 @@ init_transfer_meta (p4est_transfer_meta_t *meta, size_t point_size)
   /* prepare arrays, so that we can push to them directly later */
   meta->send_buffers = sc_array_new (sizeof (sc_array_t));
   meta->receivers = sc_array_new (sizeof (int));
-  meta->recvs_counts = sc_array_new (sizeof (size_t));
-  meta->recv_weights = sc_array_new (sizeof (size_t));
+  meta->recvs_info = sc_array_new (sizeof (p4est_transfer_info_t));
   meta->senders = sc_array_new (sizeof (int));
-  meta->senders_counts = sc_array_new (sizeof (size_t));
+  meta->sends_info = sc_array_new (sizeof (p4est_transfer_info_t));
 }
 
 static void
@@ -1535,11 +1538,8 @@ destroy_transfer_meta (p4est_transfer_meta_t *meta)
   if (meta->receivers != NULL) {
     sc_array_destroy_null (&meta->receivers);
   }
-  if (meta->recvs_counts != NULL) {
-    sc_array_destroy_null (&meta->recvs_counts);
-  }
-  if (meta->recv_weights != NULL) {
-    sc_array_destroy_null (&meta->recv_weights);
+  if (meta->recvs_info != NULL) {
+    sc_array_destroy_null (&meta->recvs_info);
   }
   if (meta->send_buffers != NULL) {
     for (ibz = 0; ibz < meta->send_buffers->elem_count; ibz++) {
@@ -1553,8 +1553,8 @@ destroy_transfer_meta (p4est_transfer_meta_t *meta)
   if (meta->senders != NULL) {
     sc_array_destroy_null (&meta->senders);
   }
-  if (meta->senders_counts != NULL) {
-    sc_array_destroy_null (&meta->senders_counts);
+  if (meta->sends_info != NULL) {
+    sc_array_destroy_null (&meta->sends_info);
   }
   P4EST_FREE (meta->offsets);
 }
@@ -1652,6 +1652,7 @@ push_to_send_buffer (p4est_transfer_meta_t *meta,
   size_t              bcount;
   sc_array_t         *b;
   int                 rank;
+  p4est_transfer_info_t *info;
 
   /* if we have a new receiver, push a new send buffer */
   bcount = meta->send_buffers->elem_count;
@@ -1659,6 +1660,8 @@ push_to_send_buffer (p4est_transfer_meta_t *meta,
   if (bcount > 0) {
     b = (sc_array_t *) sc_array_index (meta->send_buffers, bcount - 1);
     rank = *(int *) sc_array_index (meta->receivers, bcount - 1);
+    info =
+      (p4est_transfer_info_t *) sc_array_index (meta->recvs_info, bcount - 1);
     P4EST_ASSERT (rank <= receiver);
     P4EST_ASSERT (b->elem_count > 0);
   }
@@ -1680,21 +1683,20 @@ push_to_send_buffer (p4est_transfer_meta_t *meta,
     *(int *) sc_array_push (meta->receivers) = receiver;
 
     /* init a new receive count and weight */
-    *(size_t *) sc_array_push (meta->recvs_counts) = 0;
-    if (internal->max_weigth >= 0) {
-      /* we only need to track weights, if a maximum weight was specified */
-      *(size_t *) sc_array_push (meta->recv_weights) = 0;
-    }
+    info = (p4est_transfer_info_t *) sc_array_push (meta->recvs_info);
+    info->count = 0;
+    info->weight = 0;
   }
 
   /* add point to send buffer */
   memcpy (sc_array_push (b), sc_array_index (c->points, pi),
           meta->point_size);
-  *(size_t *) sc_array_index (meta->recvs_counts, bcount - 1) += 1;
+  info->count++;
   if (internal->max_weigth >= 0) {
     /* add the points' weight to the total weight for the receiver */
-    *(size_t *) sc_array_index (meta->recv_weights, bcount - 1) +=
-      internal->point_weight_fn (sc_array_index (c->points, pi), internal->user_pointer);
+    info->weight +=
+      internal->point_weight_fn (sc_array_index (c->points, pi),
+                                 internal->user_pointer);
   }
 }
 
@@ -1908,7 +1910,7 @@ post_sends (p4est_transfer_meta_t *meta,
  *  offsets to receive incoming points at.
  *
  *  The outputs are stored in the fields meta->num_incoming and meta->offsets.
- *  We assume that meta->senders and meta->senders_counts are already
+ *  We assume that meta->senders and meta->sends_info are already
  *  populated.
  *
  * \param[in,out] meta communication metadata.
@@ -1916,6 +1918,8 @@ post_sends (p4est_transfer_meta_t *meta,
 static void
 compute_offsets_and_num_incoming (p4est_transfer_meta_t *meta)
 {
+  p4est_transfer_info_t *info;
+
   /* initialize offset array */
   meta->num_incoming = 0;
   meta->offsets = P4EST_ALLOC (size_t, meta->senders->elem_count);
@@ -1923,8 +1927,8 @@ compute_offsets_and_num_incoming (p4est_transfer_meta_t *meta)
   /* compute offsets */
   for (int i = 0; i < (int) meta->senders->elem_count; i++) {
     meta->offsets[i] = meta->num_incoming * meta->point_size;
-    meta->num_incoming +=
-      *(size_t *) sc_array_index_int (meta->senders_counts, i);
+    info = (p4est_transfer_info_t *) sc_array_index_int (meta->sends_info, i);
+    meta->num_incoming += info->count;
   }
 }
 
@@ -1933,7 +1937,7 @@ compute_offsets_and_num_incoming (p4est_transfer_meta_t *meta)
  *  than receiving it through MPI.
  *
  *  We expect to receive points from each sender in meta->senders. The number
- *  of points each sender is sending is stored in meta->senders_counts (with
+ *  of points each sender is sending is stored in meta->sends_info (with
  *  corresponding indexing). We receive each message at the offset stored in
  *  meta->offsets (again with corresponding indexing).
  *
@@ -1952,6 +1956,7 @@ post_receives (p4est_transfer_meta_t *meta,
   void               *self_dest = NULL;
   size_t              ibz;
   sc_array_t         *b;
+  p4est_transfer_info_t *info;
 
   /* get rank */
   mpiret = sc_MPI_Comm_rank (mpicomm, &rank);
@@ -1960,13 +1965,12 @@ post_receives (p4est_transfer_meta_t *meta,
   /* for each sender q */
   for (int i = 0; i < (int) meta->senders->elem_count; i++) {
     q = *(int *) sc_array_index_int (meta->senders, i);
+    info = (p4est_transfer_info_t *) sc_array_index_int (meta->sends_info, i);
 
     if (q != rank) {
       /* post non-blocking receive for points from q */
       mpiret = sc_MPI_Irecv (((char *) recv_buffer) + meta->offsets[i],
-                             (*(size_t *)
-                              sc_array_index_int (meta->senders_counts,
-                                                  i)) * meta->point_size,
+                             info->count * meta->point_size,
                              sc_MPI_BYTE, q, 0, mpicomm, req + i);
       SC_CHECK_MPI (mpiret);
     }
@@ -2176,9 +2180,9 @@ p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
   errsend = resp.errsend || own.errsend;
 
   /* sanity checks */
-  P4EST_ASSERT (resp.receivers->elem_count == resp.recvs_counts->elem_count);
+  P4EST_ASSERT (resp.receivers->elem_count == resp.recvs_info->elem_count);
   P4EST_ASSERT (resp.receivers->elem_count == resp.send_buffers->elem_count);
-  P4EST_ASSERT (own.receivers->elem_count == own.recvs_counts->elem_count);
+  P4EST_ASSERT (own.receivers->elem_count == own.recvs_info->elem_count);
   P4EST_ASSERT (own.receivers->elem_count == own.send_buffers->elem_count);
 
   /* if messages from this process are valid then continue optimistically */
@@ -2217,14 +2221,14 @@ p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
 
   /* notify processes receiving points from p and determine processes sending
      to p. Also exchange counts of points being sent. */
-  sc_notify_ext (own.receivers, own.senders, own.recvs_counts,
-                 own.senders_counts, mpicomm);
-  sc_notify_ext (resp.receivers, resp.senders, resp.recvs_counts,
-                 resp.senders_counts, mpicomm);
+  sc_notify_ext (own.receivers, own.senders, own.recvs_info,
+                 own.sends_info, mpicomm);
+  sc_notify_ext (resp.receivers, resp.senders, resp.recvs_info,
+                 resp.sends_info, mpicomm);
 
   /* sanity checks */
-  P4EST_ASSERT (own.senders->elem_count == own.senders_counts->elem_count);
-  P4EST_ASSERT (resp.senders->elem_count == resp.senders_counts->elem_count);
+  P4EST_ASSERT (own.senders->elem_count == own.sends_info->elem_count);
+  P4EST_ASSERT (resp.senders->elem_count == resp.sends_info->elem_count);
 
   /* compute number of incoming points, and offsets to store each message */
   compute_offsets_and_num_incoming (&own);
