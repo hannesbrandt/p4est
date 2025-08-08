@@ -1632,6 +1632,12 @@ p4est_points_context_is_valid (p4est_points_context_t *c)
 
 #endif
 
+static int
+p4est_transfer_count_fn (void *point, void *user)
+{
+  return 1;
+}
+
 void
 p4est_init_points_context (p4est_points_context_t *c, sc_array_t *points)
 {
@@ -2157,6 +2163,15 @@ p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
   /* Init metadata fields to NULL */
   init_transfer_meta (&resp, point_size);
   init_transfer_meta (&own, point_size);
+
+  /* check point weight input for consistency */
+  P4EST_ASSERT (internal->max_weigth >= 0
+                || internal->point_weight_fn == NULL);
+  if (internal->max_weigth >= 0 && internal->point_weight_fn == NULL) {
+    /* we want to compute weights, but no point-weight callback is specified,
+     * use the default count callback instead */
+    internal->point_weight_fn = p4est_transfer_count_fn;
+  }
 
   /* Init unowned points store */
   if (internal->save_unowned) {
