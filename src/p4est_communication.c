@@ -1583,7 +1583,7 @@ typedef struct p4est_transfer_internal
   p4est_t            *p4est;
 
   /* weight computation */
-  int                 max_weigth;       /* the maximum allowed weight per process */
+  int                 max_weight;       /* the maximum allowed weight per process */
   p4est_point_weight_t point_weight_fn; /* callback to compute point weights */
 
   /* data needed if we do not have a full p4est */
@@ -1698,7 +1698,7 @@ push_to_send_buffer (p4est_transfer_meta_t *meta,
   memcpy (sc_array_push (b), sc_array_index (c->points, pi),
           meta->point_size);
   info->count++;
-  if (internal->max_weigth >= 0) {
+  if (internal->max_weight >= 0) {
     /* add the points' weight to the total weight for the receiver */
     info->weight +=
       internal->point_weight_fn (sc_array_index (c->points, pi),
@@ -2028,7 +2028,7 @@ p4est_transfer_search (p4est_t *p4est, p4est_points_context_t *c,
   P4EST_ASSERT (p4est_points_context_is_valid (c));
   internal.c = c;
   internal.intersect_fn = intersect_fn;
-  internal.max_weigth = max_weight;
+  internal.max_weight = max_weight;
   internal.point_weight_fn = point_weight_fn;
   internal.p4est = p4est;
   internal.mpicomm = p4est->mpicomm;
@@ -2074,7 +2074,7 @@ p4est_transfer_search_gfx (const p4est_gloidx_t *gfq,
   P4EST_ASSERT (p4est_points_context_is_valid (c));
   internal.c = c;
   internal.intersect_fn = intersect_fn;
-  internal.max_weigth = max_weight;
+  internal.max_weight = max_weight;
   internal.point_weight_fn = point_weight_fn;
   internal.user_pointer = user_pointer;
   internal.mpicomm = mpicomm;
@@ -2111,7 +2111,7 @@ p4est_transfer_search_gfp (const p4est_quadrant_t *gfp, int nmemb,
   P4EST_ASSERT (p4est_points_context_is_valid (c));
   internal.c = c;
   internal.intersect_fn = intersect_fn;
-  internal.max_weigth = max_weight;
+  internal.max_weight = max_weight;
   internal.point_weight_fn = point_weight_fn;
   internal.user_pointer = user_pointer;
   internal.mpicomm = mpicomm;
@@ -2165,9 +2165,9 @@ p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
   init_transfer_meta (&own, point_size);
 
   /* check point weight input for consistency */
-  P4EST_ASSERT (internal->max_weigth >= 0
+  P4EST_ASSERT (internal->max_weight >= 0
                 || internal->point_weight_fn == NULL);
-  if (internal->max_weigth >= 0 && internal->point_weight_fn == NULL) {
+  if (internal->max_weight >= 0 && internal->point_weight_fn == NULL) {
     /* we want to compute weights, but no point-weight callback is specified,
      * use the default count callback instead */
     internal->point_weight_fn = p4est_transfer_count_fn;
