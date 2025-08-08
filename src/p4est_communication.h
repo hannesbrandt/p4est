@@ -615,7 +615,7 @@ typedef int         (*p4est_intersect_t) (p4est_t *p4est,
  * \param[in] user          Pointer to user-provided context data.
  * \return                  The integer weight of the point.
  */
-typedef int         (*p4est_point_weight_t) (void *point, void *user);
+typedef size_t      (*p4est_point_weight_t) (void *point, void *user);
 
 /** This structure is used with \ref p4est_transfer_search to maintain a
  * distributed collection of points, so that the points known to a process
@@ -744,7 +744,7 @@ void                 p4est_init_points_context (p4est_points_context_t *c,
 int                 p4est_transfer_search (p4est_t *p4est,
                                            p4est_points_context_t *c,
                                            p4est_intersect_t intersect_fn,
-                                           int max_weight,
+                                           size_t max_weight,
                                            p4est_point_weight_t
                                            point_weight_fn, int save_unowned);
 
@@ -778,7 +778,7 @@ int                 p4est_transfer_search_gfx (const p4est_gloidx_t *gfq,
                                                sc_MPI_Comm mpicomm,
                                                p4est_points_context_t *c,
                                                p4est_intersect_t intersect_fn,
-                                               int max_weight,
+                                               size_t max_weight,
                                                p4est_point_weight_t
                                                point_weight_fn,
                                                int save_unowned);
@@ -816,8 +816,9 @@ int                 p4est_transfer_search_gfp (const p4est_quadrant_t *gfp,
                                                sc_MPI_Comm mpicomm,
                                                p4est_points_context_t *c,
                                                p4est_intersect_t intersect_fn,
-                                               int max_weight,
-                                               p4est_point_weight_t point_weight_fn,
+                                               size_t max_weight,
+                                               p4est_point_weight_t
+                                               point_weight_fn,
                                                int save_unowned);
 
 SC_EXTERN_C_END;

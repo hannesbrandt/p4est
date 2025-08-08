@@ -1585,7 +1585,7 @@ typedef struct p4est_transfer_internal
   /* weight computation */
   int                 compute_weights;  /* flag indicating, if the user passed
                                            a valid weight computation setup */
-  int                 max_weight;       /* the maximum allowed weight per process */
+  size_t              max_weight;       /* the maximum allowed weight per process */
   p4est_point_weight_t point_weight_fn; /* callback to compute point weights */
 
   /* data needed if we do not have a full p4est */
@@ -2017,7 +2017,7 @@ static int
 
 int
 p4est_transfer_search (p4est_t *p4est, p4est_points_context_t *c,
-                       p4est_intersect_t intersect_fn, int max_weight,
+                       p4est_intersect_t intersect_fn, size_t max_weight,
                        p4est_point_weight_t point_weight_fn, int save_unowned)
 {
   int                 err;
@@ -2064,7 +2064,7 @@ p4est_transfer_search_gfx (const p4est_gloidx_t *gfq,
                            void *user_pointer,
                            sc_MPI_Comm mpicomm,
                            p4est_points_context_t *c,
-                           p4est_intersect_t intersect_fn, int max_weight,
+                           p4est_intersect_t intersect_fn, size_t max_weight,
                            p4est_point_weight_t point_weight_fn,
                            int save_unowned)
 {
@@ -2101,7 +2101,7 @@ p4est_transfer_search_gfp (const p4est_quadrant_t *gfp, int nmemb,
                            void *user_pointer,
                            sc_MPI_Comm mpicomm,
                            p4est_points_context_t *c,
-                           p4est_intersect_t intersect_fn, int max_weight,
+                           p4est_intersect_t intersect_fn, size_t max_weight,
                            p4est_point_weight_t point_weight_fn,
                            int save_unowned)
 {
