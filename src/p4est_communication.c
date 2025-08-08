@@ -1583,6 +1583,8 @@ typedef struct p4est_transfer_internal
   p4est_t            *p4est;
 
   /* weight computation */
+  int                 compute_weights;  /* flag indicating, if the user passed
+                                           a valid weight computation setup */
   int                 max_weight;       /* the maximum allowed weight per process */
   p4est_point_weight_t point_weight_fn; /* callback to compute point weights */
 
@@ -1698,7 +1700,7 @@ push_to_send_buffer (p4est_transfer_meta_t *meta,
   memcpy (sc_array_push (b), sc_array_index (c->points, pi),
           meta->point_size);
   info->count++;
-  if (internal->max_weight >= 0) {
+  if (internal->compute_weights) {
     /* add the points' weight to the total weight for the receiver */
     info->weight +=
       internal->point_weight_fn (sc_array_index (c->points, pi),
@@ -2165,9 +2167,10 @@ p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
   init_transfer_meta (&own, point_size);
 
   /* check point weight input for consistency */
-  P4EST_ASSERT (internal->max_weight >= 0
+  internal->compute_weights = (internal->max_weight >= 0);
+  P4EST_ASSERT (internal->compute_weights
                 || internal->point_weight_fn == NULL);
-  if (internal->max_weight >= 0 && internal->point_weight_fn == NULL) {
+  if (internal->compute_weights && internal->point_weight_fn == NULL) {
     /* we want to compute weights, but no point-weight callback is specified,
      * use the default count callback instead */
     internal->point_weight_fn = p4est_transfer_count_fn;
