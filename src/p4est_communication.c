@@ -1665,7 +1665,7 @@ push_to_send_buffer (p4est_transfer_meta_t *meta,
   }
   if (bcount == 0 || rank < receiver) {
     /* push a new send buffer */
-    b = sc_array_push (meta->send_buffers);
+    b = (sc_array_t *) sc_array_push (meta->send_buffers);
     sc_array_init (b, meta->point_size);
     bcount++;
 
