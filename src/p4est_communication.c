@@ -1487,6 +1487,8 @@ typedef struct p4est_transfer_meta
   /* data used for sending */
   /* number of points that p receives in this iteration */
   size_t              num_incoming;
+  /* size of all points sent and received */
+  size_t              point_size;
   /* q -> {points that p is sending to q} */
   sc_array_t         *send_buffers;
   /* ranks receiving points from p */
@@ -1507,10 +1509,11 @@ typedef struct p4est_transfer_meta
 
 /** Safely NULL-init transfer search metadata */
 static void
-init_transfer_meta (p4est_transfer_meta_t *meta)
+init_transfer_meta (p4est_transfer_meta_t *meta, size_t point_size)
 {
   /* initialize the whole structure including compiler padding */
   memset (meta, 0, sizeof (*meta));
+  meta->point_size = point_size;
 }
 
 static void
@@ -1633,7 +1636,6 @@ push_to_send_buffer (p4est_transfer_meta_t *meta,
                      p4est_locidx_t pi, int receiver)
 {
   size_t              bcount;
-  size_t              point_size = c->points->elem_size;
   sc_array_t         *b;
   int                 rank;
 
@@ -1657,7 +1659,7 @@ push_to_send_buffer (p4est_transfer_meta_t *meta,
   if (bcount == 0 || rank < receiver) {
     /* push a new send buffer */
     b = sc_array_push (meta->send_buffers);
-    sc_array_init (b, point_size);
+    sc_array_init (b, meta->point_size);
     bcount++;
 
     /* store the rank of the receiver */
@@ -1668,7 +1670,8 @@ push_to_send_buffer (p4est_transfer_meta_t *meta,
   }
 
   /* add point to send buffer */
-  memcpy (sc_array_push (b), sc_array_index (c->points, pi), point_size);
+  memcpy (sc_array_push (b), sc_array_index (c->points, pi),
+          meta->point_size);
   *(size_t *) sc_array_index (meta->recvs_counts, bcount - 1) += 1;
 }
 
@@ -1787,7 +1790,6 @@ compute_send_buffers (p4est_transfer_internal_t *internal)
   p4est_transfer_meta_t *resp = internal->resp;
   p4est_transfer_meta_t *own = internal->own;
   p4est_locidx_t      il;
-  const size_t        point_size = c->points->elem_size;
 
   /* Initialize last_procs to -1 to signify no points have been added to send
      buffers. */
@@ -1839,7 +1841,7 @@ compute_send_buffers (p4est_transfer_internal_t *internal)
       if (internal->last_procs[il] == -1) {
         /* add point to unowned points buffer */
         memcpy (sc_array_push (internal->unowned_points),
-                sc_array_index (c->points, il), point_size);
+                sc_array_index (c->points, il), resp->point_size);
       }
     }
   }
@@ -1857,11 +1859,10 @@ compute_send_buffers (p4est_transfer_internal_t *internal)
  * \param[in]   meta        communication data
  * \param[in]   mpicomm     MPI communicator
  * \param[out]  req         request storage of same length as comm->receivers
- * \param[in]   point_size  size of a single point
  */
 static void
 post_sends (p4est_transfer_meta_t *meta,
-            sc_MPI_Comm mpicomm, sc_MPI_Request *req, size_t point_size)
+            sc_MPI_Comm mpicomm, sc_MPI_Request *req)
 {
   int                 mpiret;
   int                 q;
@@ -1879,7 +1880,7 @@ post_sends (p4est_transfer_meta_t *meta,
     if (q != rank) {
       /* post non-blocking send of points to q */
       b = (sc_array_t *) sc_array_index_int (meta->send_buffers, i);
-      mpiret = sc_MPI_Isend (b->array, b->elem_count * point_size,
+      mpiret = sc_MPI_Isend (b->array, b->elem_count * meta->point_size,
                              sc_MPI_BYTE, q, 0, mpicomm, req + i);
       SC_CHECK_MPI (mpiret);
     }
@@ -1900,8 +1901,7 @@ post_sends (p4est_transfer_meta_t *meta,
  * \param[in,out] meta communication metadata.
  */
 static void
-compute_offsets_and_num_incoming (p4est_transfer_meta_t *meta,
-                                  size_t point_size)
+compute_offsets_and_num_incoming (p4est_transfer_meta_t *meta)
 {
   /* initialize offset array */
   meta->num_incoming = 0;
@@ -1909,7 +1909,7 @@ compute_offsets_and_num_incoming (p4est_transfer_meta_t *meta,
 
   /* compute offsets */
   for (int i = 0; i < (int) meta->senders->elem_count; i++) {
-    meta->offsets[i] = meta->num_incoming * point_size;
+    meta->offsets[i] = meta->num_incoming * meta->point_size;
     meta->num_incoming +=
       *(size_t *) sc_array_index_int (meta->senders_counts, i);
   }
@@ -1928,12 +1928,10 @@ compute_offsets_and_num_incoming (p4est_transfer_meta_t *meta,
  *  \param[in,out] recv_buffer points to array where received points are stored
  *  \param[out] req request storage of same length as meta->senders
  *  \param[in] mpicomm MPI communicator
- *  \param[in] point_size size of a single point
-*/
+ */
 static void
 post_receives (p4est_transfer_meta_t *meta,
-               char *recv_buffer,
-               sc_MPI_Request *req, sc_MPI_Comm mpicomm, size_t point_size)
+               char *recv_buffer, sc_MPI_Request *req, sc_MPI_Comm mpicomm)
 {
   int                 mpiret;
   int                 q;
@@ -1955,7 +1953,7 @@ post_receives (p4est_transfer_meta_t *meta,
       mpiret = sc_MPI_Irecv (((char *) recv_buffer) + meta->offsets[i],
                              (*(size_t *)
                               sc_array_index_int (meta->senders_counts,
-                                                  i)) * point_size,
+                                                  i)) * meta->point_size,
                              sc_MPI_BYTE, q, 0, mpicomm, req + i);
       SC_CHECK_MPI (mpiret);
     }
@@ -1977,7 +1975,7 @@ post_receives (p4est_transfer_meta_t *meta,
     }
     P4EST_ASSERT (*(int *) sc_array_index (meta->receivers, ibz) == rank);
     b = (sc_array_t *) sc_array_index (meta->send_buffers, ibz);
-    memcpy (self_dest, b->array, b->elem_count * point_size);
+    memcpy (self_dest, b->array, b->elem_count * meta->point_size);
   }
 }
 
@@ -2140,8 +2138,8 @@ p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
   size_t              num_incoming;
 
   /* Init metadata fields to NULL */
-  init_transfer_meta (&resp);
-  init_transfer_meta (&own);
+  init_transfer_meta (&resp, point_size);
+  init_transfer_meta (&own, point_size);
 
   /* Init unowned points store */
   if (internal->save_unowned) {
@@ -2175,9 +2173,8 @@ p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
     send_req = P4EST_ALLOC (sc_MPI_Request, num_send_reqs);
 
     /* post non-blocking sends */
-    post_sends (&resp, mpicomm, send_req, point_size);
-    post_sends (&own, mpicomm, send_req + resp.receivers->elem_count,
-                point_size);
+    post_sends (&resp, mpicomm, send_req);
+    post_sends (&own, mpicomm, send_req + resp.receivers->elem_count);
 
     /* initialize buffers for sc_notify_ext */
     own.senders = sc_array_new (sizeof (int));
@@ -2217,8 +2214,8 @@ p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
   P4EST_ASSERT (resp.senders->elem_count == resp.senders_counts->elem_count);
 
   /* compute number of incoming points, and offsets to store each message */
-  compute_offsets_and_num_incoming (&own, point_size);
-  compute_offsets_and_num_incoming (&resp, point_size);
+  compute_offsets_and_num_incoming (&own);
+  compute_offsets_and_num_incoming (&resp);
 
   if (internal->save_unowned) {
     num_unowned = internal->unowned_points->elem_count;
@@ -2274,10 +2271,10 @@ p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
 
   /* post non-blocking receives */
   post_receives (&resp, c->points->array + num_unowned * point_size,
-                 recv_req, mpicomm, point_size);
+                 recv_req, mpicomm);
   post_receives (&own,
                  c->points->array + resp.num_incoming * point_size,
-                 recv_req + resp.senders->elem_count, mpicomm, point_size);
+                 recv_req + resp.senders->elem_count, mpicomm);
 
   /* copy unowned points from buffer */
   if (internal->save_unowned) {
