@@ -1513,6 +1513,8 @@ typedef struct p4est_transfer_meta
   sc_array_t         *senders;
   /* number and weight of points p gets from each sender */
   sc_array_t         *sends_info;
+  /* the ratio by which the local max_weight would be exceeded */
+  double              ratio;
   /* q -> byte offset to receive message from q at */
   size_t             *offsets;
 } p4est_transfer_meta_t;
@@ -1896,8 +1898,7 @@ compute_send_buffers (p4est_transfer_internal_t *internal)
 }
 
 static void
-exchange_ratios (p4est_transfer_meta_t *meta, double ratio,
-                 sc_MPI_Comm mpicomm)
+exchange_ratios (p4est_transfer_meta_t *meta, sc_MPI_Comm mpicomm)
 {
   sc_array_t         *replicated_ratios;
   int                 mpiret;
@@ -1911,7 +1912,7 @@ exchange_ratios (p4est_transfer_meta_t *meta, double ratio,
   replicated_ratios = sc_array_new_count (sizeof (double), num_senders);
   send_reqs = P4EST_ALLOC (sc_MPI_Request, num_senders);
   for (is = 0; is < num_senders; is++) {
-    *(double *) sc_array_index (replicated_ratios, is) = ratio;
+    *(double *) sc_array_index (replicated_ratios, is) = meta->ratio;
     mpiret = sc_MPI_Isend (sc_array_index (replicated_ratios, is), 1,
                            sc_MPI_DOUBLE,
                            *(int *) sc_array_index (meta->senders, is), 1,
@@ -1952,7 +1953,8 @@ exchange_ratios (p4est_transfer_meta_t *meta, double ratio,
  */
 static void
 post_sends (p4est_transfer_meta_t *meta,
-            sc_MPI_Comm mpicomm, sc_MPI_Request *req)
+            p4est_transfer_internal_t *internal, sc_MPI_Comm mpicomm,
+            sc_MPI_Request *req)
 {
   int                 mpiret;
   int                 q;
@@ -1967,16 +1969,22 @@ post_sends (p4est_transfer_meta_t *meta,
   for (int i = 0; i < (int) meta->receivers->elem_count; i++) {
     q = *(int *) sc_array_index_int (meta->receivers, i);
 
-    if (q != rank) {
+    if (q == rank) {
+      /* we do not send a message to ourself with MPI; copy is faster */
+      req[i] = sc_MPI_REQUEST_NULL;
+    }
+    else if (internal->compute_weights
+             && *(double *) sc_array_index (meta->recvs_ratios, i) > 1.) {
+      /* we do not send a message, if the target processes max_weight would be
+       * exceeded */
+      req[i] = sc_MPI_REQUEST_NULL;
+    }
+    else {
       /* post non-blocking send of points to q */
       b = (sc_array_t *) sc_array_index_int (meta->send_buffers, i);
       mpiret = sc_MPI_Isend (b->array, b->elem_count * meta->point_size,
                              sc_MPI_BYTE, q, 0, mpicomm, req + i);
       SC_CHECK_MPI (mpiret);
-    }
-    else {
-      /* we do not send a message to ourself with MPI; copy is faster */
-      req[i] = sc_MPI_REQUEST_NULL;
     }
   }
 }
@@ -2009,6 +2017,32 @@ compute_offsets_and_num_incoming (p4est_transfer_meta_t *meta)
   }
 }
 
+static void
+update_offsets_and_num_incoming (p4est_transfer_meta_t *meta,
+                                 sc_MPI_Comm mpicomm)
+{
+  size_t              is;
+  int                 mpiret;
+  int                 rank;
+  p4est_transfer_info_t *info;
+
+  /* get rank */
+  mpiret = sc_MPI_Comm_rank (mpicomm, &rank);
+  SC_CHECK_MPI (mpiret);
+
+  for (is = 0; is < meta->senders->elem_count; is++) {
+    if (*(int *) sc_array_index (meta->senders, is) == rank) {
+      /* for a ratio larger than 1. only the points from a process to itself
+       * will be correctly transfered to the new points buffer. We can achieve
+       * this by updating num_incoming and resetting the offset of this ranks
+       * message to be at the beginning of the send_buffer */
+      info = (p4est_transfer_info_t *) sc_array_index (meta->sends_info, is);
+      meta->num_incoming = info->count;
+      meta->offsets[is] = 0;
+    }
+  }
+}
+
 /** Post non-blocking receives for senders in the given communication data.
  *  If there is a message for ourself then we copy it manually here rather
  *  than receiving it through MPI.
@@ -2025,7 +2059,8 @@ compute_offsets_and_num_incoming (p4est_transfer_meta_t *meta)
  */
 static void
 post_receives (p4est_transfer_meta_t *meta,
-               char *recv_buffer, sc_MPI_Request *req, sc_MPI_Comm mpicomm)
+               p4est_transfer_internal_t *internal, char *recv_buffer,
+               sc_MPI_Request *req, sc_MPI_Comm mpicomm)
 {
   int                 mpiret;
   int                 q;
@@ -2044,18 +2079,24 @@ post_receives (p4est_transfer_meta_t *meta,
     q = *(int *) sc_array_index_int (meta->senders, i);
     info = (p4est_transfer_info_t *) sc_array_index_int (meta->sends_info, i);
 
-    if (q != rank) {
+    if (q == rank) {
+      /* we do not receive a message from ourself with MPI; copy is faster */
+      req[i] = sc_MPI_REQUEST_NULL;
+      /* set receive buffer */
+      self_dest = ((char *) recv_buffer) + meta->offsets[i];
+    }
+    else if (internal->compute_weights && meta->ratio > 1.) {
+      /* we do not receive any points, if the local max_weight would be exceeded
+       * we can still copy the already local points, as they are already
+       * accounted for in the ratio calculation */
+      req[i] = sc_MPI_REQUEST_NULL;
+    }
+    else {
       /* post non-blocking receive for points from q */
       mpiret = sc_MPI_Irecv (((char *) recv_buffer) + meta->offsets[i],
                              info->count * meta->point_size,
                              sc_MPI_BYTE, q, 0, mpicomm, req + i);
       SC_CHECK_MPI (mpiret);
-    }
-    else {
-      /* we do not receive a message from ourself with MPI; copy is faster */
-      req[i] = sc_MPI_REQUEST_NULL;
-      /* set receive buffer */
-      self_dest = ((char *) recv_buffer) + meta->offsets[i];
     }
   }
   /* receive requests have been posted */
@@ -2212,7 +2253,6 @@ p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
   int                 errsend = 0;
   int                 err = 0;
   size_t              weight_local;
-  double              ratio;
   p4est_points_context_t *c = internal->c;
   const size_t        point_size = c->points->elem_size;
   p4est_transfer_meta_t resp;
@@ -2313,13 +2353,21 @@ p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
      * incoming points in order to stay below max_weight, even if we can not
      * send any of the local points to another process and thus have to keep
      * all of them */
-    ratio = ((double) resp.weight_incoming + own.weight_incoming) /
-      (internal->max_weight - weight_local);
+    resp.ratio = own.ratio =
+      ((double) resp.weight_incoming +
+       own.weight_incoming) / (internal->max_weight - weight_local);
+
+    if (resp.ratio > 1.) {
+      /* adapt buffers to only allocate space for the message from this rank
+       * to itself, as all other messages will not be sent */
+      update_offsets_and_num_incoming (&resp, mpicomm);
+      update_offsets_and_num_incoming (&own, mpicomm);
+    }
 
     /* send the ratio to all processes that this process will receive messages
      * from */
-    exchange_ratios (&resp, ratio, mpicomm);
-    exchange_ratios (&own, ratio, mpicomm);
+    exchange_ratios (&resp, mpicomm);
+    exchange_ratios (&own, mpicomm);
   }
 
   /* total number of messages this process will send */
@@ -2331,8 +2379,8 @@ p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
   send_req = P4EST_ALLOC (sc_MPI_Request, num_send_reqs);
 
   /* post non-blocking sends */
-  post_sends (&resp, mpicomm, send_req);
-  post_sends (&own, mpicomm, send_req + resp.receivers->elem_count);
+  post_sends (&resp, internal, mpicomm, send_req);
+  post_sends (&own, internal, mpicomm, send_req + resp.receivers->elem_count);
 
   if (internal->save_unowned) {
     num_unowned = internal->unowned_points->elem_count;
@@ -2387,9 +2435,9 @@ p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
   recv_req = P4EST_ALLOC (sc_MPI_Request, num_recv_reqs);
 
   /* post non-blocking receives */
-  post_receives (&resp, c->points->array + num_unowned * point_size,
+  post_receives (&resp, internal, c->points->array + num_unowned * point_size,
                  recv_req, mpicomm);
-  post_receives (&own,
+  post_receives (&own, internal,
                  c->points->array + resp.num_incoming * point_size,
                  recv_req + resp.senders->elem_count, mpicomm);
 
