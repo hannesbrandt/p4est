@@ -1508,6 +1508,11 @@ typedef struct p4est_transfer_meta
   /* mark, if we ecountered a message size error during setup */
   int                 errsend;
 
+  /* the mpicomm used for exchanging points */
+  sc_MPI_Comm         mpicomm;
+  /* the local rank in mpicomm */
+  int                 mpirank;
+
   /* data used for receiving */
   /* ranks sending points to p */
   sc_array_t         *senders;
@@ -1521,11 +1526,17 @@ typedef struct p4est_transfer_meta
 
 /** Safely NULL-init transfer search metadata */
 static void
-init_transfer_meta (p4est_transfer_meta_t *meta, size_t point_size)
+init_transfer_meta (p4est_transfer_meta_t *meta, size_t point_size,
+                    sc_MPI_Comm mpicomm)
 {
+  int                 mpiret;
+
   /* initialize the whole structure including compiler padding */
   memset (meta, 0, sizeof (*meta));
   meta->point_size = point_size;
+  meta->mpicomm = mpicomm;
+  mpiret = sc_MPI_Comm_rank (mpicomm, &meta->mpirank);
+  SC_CHECK_MPI (mpiret);
 
   /* prepare arrays, so that we can push to them directly later */
   meta->send_buffers = sc_array_new (sizeof (sc_array_t));
@@ -1898,7 +1909,7 @@ compute_send_buffers (p4est_transfer_internal_t *internal)
 }
 
 static void
-exchange_ratios (p4est_transfer_meta_t *meta, sc_MPI_Comm mpicomm)
+exchange_ratios (p4est_transfer_meta_t *meta)
 {
   sc_array_t         *replicated_ratios;
   int                 mpiret;
@@ -1916,7 +1927,7 @@ exchange_ratios (p4est_transfer_meta_t *meta, sc_MPI_Comm mpicomm)
     mpiret = sc_MPI_Isend (sc_array_index (replicated_ratios, is), 1,
                            sc_MPI_DOUBLE,
                            *(int *) sc_array_index (meta->senders, is), 1,
-                           mpicomm, &send_reqs[is]);
+                           meta->mpicomm, &send_reqs[is]);
     SC_CHECK_MPI (mpiret);
   }
 
@@ -1928,7 +1939,7 @@ exchange_ratios (p4est_transfer_meta_t *meta, sc_MPI_Comm mpicomm)
     mpiret = sc_MPI_Irecv (sc_array_index (meta->recvs_ratios, ir), 1,
                            sc_MPI_DOUBLE,
                            *(int *) sc_array_index (meta->receivers, ir), 1,
-                           mpicomm, &recv_reqs[ir]);
+                           meta->mpicomm, &recv_reqs[ir]);
     SC_CHECK_MPI (mpiret);
   }
 
@@ -1948,28 +1959,21 @@ exchange_ratios (p4est_transfer_meta_t *meta, sc_MPI_Comm mpicomm)
  * meta->send_buffers[q]
  *
  * \param[in]   meta        communication data
- * \param[in]   mpicomm     MPI communicator
  * \param[out]  req         request storage of same length as comm->receivers
  */
 static void
 post_sends (p4est_transfer_meta_t *meta,
-            p4est_transfer_internal_t *internal, sc_MPI_Comm mpicomm,
-            sc_MPI_Request *req)
+            p4est_transfer_internal_t *internal, sc_MPI_Request *req)
 {
   int                 mpiret;
   int                 q;
-  int                 rank;
   sc_array_t         *b;
-
-  /* get rank */
-  mpiret = sc_MPI_Comm_rank (mpicomm, &rank);
-  SC_CHECK_MPI (mpiret);
 
   /* for each receiver q */
   for (int i = 0; i < (int) meta->receivers->elem_count; i++) {
     q = *(int *) sc_array_index_int (meta->receivers, i);
 
-    if (q == rank) {
+    if (q == meta->mpirank) {
       /* we do not send a message to ourself with MPI; copy is faster */
       req[i] = sc_MPI_REQUEST_NULL;
     }
@@ -1983,7 +1987,7 @@ post_sends (p4est_transfer_meta_t *meta,
       /* post non-blocking send of points to q */
       b = (sc_array_t *) sc_array_index_int (meta->send_buffers, i);
       mpiret = sc_MPI_Isend (b->array, b->elem_count * meta->point_size,
-                             sc_MPI_BYTE, q, 0, mpicomm, req + i);
+                             sc_MPI_BYTE, q, 0, meta->mpicomm, req + i);
       SC_CHECK_MPI (mpiret);
     }
   }
@@ -2018,20 +2022,13 @@ compute_offsets_and_num_incoming (p4est_transfer_meta_t *meta)
 }
 
 static void
-update_offsets_and_num_incoming (p4est_transfer_meta_t *meta,
-                                 sc_MPI_Comm mpicomm)
+update_offsets_and_num_incoming (p4est_transfer_meta_t *meta)
 {
   size_t              is;
-  int                 mpiret;
-  int                 rank;
   p4est_transfer_info_t *info;
 
-  /* get rank */
-  mpiret = sc_MPI_Comm_rank (mpicomm, &rank);
-  SC_CHECK_MPI (mpiret);
-
   for (is = 0; is < meta->senders->elem_count; is++) {
-    if (*(int *) sc_array_index (meta->senders, is) == rank) {
+    if (*(int *) sc_array_index (meta->senders, is) == meta->mpirank) {
       /* for a ratio larger than 1. only the points from a process to itself
        * will be correctly transfered to the new points buffer. We can achieve
        * this by updating num_incoming and resetting the offset of this ranks
@@ -2055,31 +2052,25 @@ update_offsets_and_num_incoming (p4est_transfer_meta_t *meta,
  *  \param[in] meta communication data
  *  \param[in,out] recv_buffer points to array where received points are stored
  *  \param[out] req request storage of same length as meta->senders
- *  \param[in] mpicomm MPI communicator
  */
 static void
 post_receives (p4est_transfer_meta_t *meta,
                p4est_transfer_internal_t *internal, char *recv_buffer,
-               sc_MPI_Request *req, sc_MPI_Comm mpicomm)
+               sc_MPI_Request *req)
 {
   int                 mpiret;
   int                 q;
-  int                 rank;
   void               *self_dest = NULL;
   size_t              ibz;
   sc_array_t         *b;
   p4est_transfer_info_t *info;
-
-  /* get rank */
-  mpiret = sc_MPI_Comm_rank (mpicomm, &rank);
-  SC_CHECK_MPI (mpiret);
 
   /* for each sender q */
   for (int i = 0; i < (int) meta->senders->elem_count; i++) {
     q = *(int *) sc_array_index_int (meta->senders, i);
     info = (p4est_transfer_info_t *) sc_array_index_int (meta->sends_info, i);
 
-    if (q == rank) {
+    if (q == meta->mpirank) {
       /* we do not receive a message from ourself with MPI; copy is faster */
       req[i] = sc_MPI_REQUEST_NULL;
       /* set receive buffer */
@@ -2095,7 +2086,7 @@ post_receives (p4est_transfer_meta_t *meta,
       /* post non-blocking receive for points from q */
       mpiret = sc_MPI_Irecv (((char *) recv_buffer) + meta->offsets[i],
                              info->count * meta->point_size,
-                             sc_MPI_BYTE, q, 0, mpicomm, req + i);
+                             sc_MPI_BYTE, q, 0, meta->mpicomm, req + i);
       SC_CHECK_MPI (mpiret);
     }
   }
@@ -2105,10 +2096,11 @@ post_receives (p4est_transfer_meta_t *meta,
   if (self_dest != NULL) {
     /* copy message to self manually rather than post receive request */
     ibz = 0;
-    while (*(int *) sc_array_index (meta->receivers, ibz) < rank) {
+    while (*(int *) sc_array_index (meta->receivers, ibz) < meta->mpirank) {
       ibz++;                    /* search for index of rank in the receivers array */
     }
-    P4EST_ASSERT (*(int *) sc_array_index (meta->receivers, ibz) == rank);
+    P4EST_ASSERT (*(int *) sc_array_index (meta->receivers, ibz) ==
+                  meta->mpirank);
     b = (sc_array_t *) sc_array_index (meta->send_buffers, ibz);
     memcpy (self_dest, b->array, b->elem_count * meta->point_size);
   }
@@ -2248,7 +2240,7 @@ int
 p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
 {
   int                 mpiret;
-  int                 num_procs, rank;
+  int                 num_procs;
   sc_MPI_Comm         mpicomm = internal->mpicomm;
   int                 errsend = 0;
   int                 err = 0;
@@ -2274,8 +2266,8 @@ p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
   size_t              num_incoming;
 
   /* Init metadata fields to NULL */
-  init_transfer_meta (&resp, point_size);
-  init_transfer_meta (&own, point_size);
+  init_transfer_meta (&resp, point_size, mpicomm);
+  init_transfer_meta (&own, point_size, mpicomm);
 
   /* check, if we want to compute weights throughout the transfer */
   internal->compute_weights = (internal->point_weight_fn != NULL);
@@ -2286,11 +2278,10 @@ p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
   }
 
   /* Get rank and total process count */
-  mpiret = sc_MPI_Comm_rank (mpicomm, &rank);
-  SC_CHECK_MPI (mpiret);
   mpiret = sc_MPI_Comm_size (mpicomm, &num_procs);
   SC_CHECK_MPI (mpiret);
 
+  weight_local = 0;
   if (internal->compute_weights) {
     weight_local = compute_local_point_weights (internal);
     /* we can only guarantee to stay below the max_weight, if the local weight
@@ -2360,14 +2351,14 @@ p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
     if (resp.ratio > 1.) {
       /* adapt buffers to only allocate space for the message from this rank
        * to itself, as all other messages will not be sent */
-      update_offsets_and_num_incoming (&resp, mpicomm);
-      update_offsets_and_num_incoming (&own, mpicomm);
+      update_offsets_and_num_incoming (&resp);
+      update_offsets_and_num_incoming (&own);
     }
 
     /* send the ratio to all processes that this process will receive messages
      * from */
-    exchange_ratios (&resp, mpicomm);
-    exchange_ratios (&own, mpicomm);
+    exchange_ratios (&resp);
+    exchange_ratios (&own);
   }
 
   /* total number of messages this process will send */
@@ -2379,8 +2370,8 @@ p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
   send_req = P4EST_ALLOC (sc_MPI_Request, num_send_reqs);
 
   /* post non-blocking sends */
-  post_sends (&resp, internal, mpicomm, send_req);
-  post_sends (&own, internal, mpicomm, send_req + resp.receivers->elem_count);
+  post_sends (&resp, internal, send_req);
+  post_sends (&own, internal, send_req + resp.receivers->elem_count);
 
   if (internal->save_unowned) {
     num_unowned = internal->unowned_points->elem_count;
@@ -2393,7 +2384,8 @@ p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
   if (num_incoming > (size_t) P4EST_LOCIDX_MAX) {
     errsend = 1;
     P4EST_LERRORF ("Rank %d would receive %lld points, which exceeds "
-                   "P4EST_LOCIDX_MAX\n", rank, (long long) num_incoming);
+                   "P4EST_LOCIDX_MAX\n", resp.mpirank,
+                   (long long) num_incoming);
   }
 
   /* synchronise possible error of a process receiving too many points */
@@ -2436,10 +2428,10 @@ p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
 
   /* post non-blocking receives */
   post_receives (&resp, internal, c->points->array + num_unowned * point_size,
-                 recv_req, mpicomm);
+                 recv_req);
   post_receives (&own, internal,
                  c->points->array + resp.num_incoming * point_size,
-                 recv_req + resp.senders->elem_count, mpicomm);
+                 recv_req + resp.senders->elem_count);
 
   /* copy unowned points from buffer */
   if (internal->save_unowned) {
