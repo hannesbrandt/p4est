@@ -1493,6 +1493,8 @@ typedef struct p4est_transfer_meta
   /* data used for sending */
   /* number of points that p receives in this iteration */
   size_t              num_incoming;
+  /* weight of points that p receives in this iteration */
+  size_t              weight_incoming;
   /* size of all points sent and received */
   size_t              point_size;
   /* q -> {points that p is sending to q} */
@@ -1642,6 +1644,26 @@ p4est_init_points_context (p4est_points_context_t *c, sc_array_t *points)
   c->num_known = points->elem_count;
   c->num_respon = points->elem_count;
   c->num_unowned = 0;
+}
+
+static size_t
+compute_local_point_weights (p4est_transfer_internal_t *internal)
+{
+  size_t              ip;
+  size_t              weight_local;
+
+  /* the points to compute the weight of */
+  p4est_points_context_t *c = internal->c;
+
+  /* loop over all responsible points and add their weights */
+  weight_local = 0;
+  P4EST_ASSERT ((size_t) c->num_respon <= c->points->elem_count);
+  for (ip = 0; ip < (size_t) c->num_respon; ip++) {
+    weight_local += internal->point_weight_fn (sc_array_index (c->points, ip),
+                                               internal->user_pointer);
+  }
+
+  return weight_local;
 }
 
 /** Push point \a pi into the send buffer for \a receiver */
@@ -1924,6 +1946,7 @@ compute_offsets_and_num_incoming (p4est_transfer_meta_t *meta)
 
   /* initialize offset array */
   meta->num_incoming = 0;
+  meta->weight_incoming = 0;
   meta->offsets = P4EST_ALLOC (size_t, meta->senders->elem_count);
 
   /* compute offsets */
@@ -1931,6 +1954,7 @@ compute_offsets_and_num_incoming (p4est_transfer_meta_t *meta)
     meta->offsets[i] = meta->num_incoming * meta->point_size;
     info = (p4est_transfer_info_t *) sc_array_index_int (meta->sends_info, i);
     meta->num_incoming += info->count;
+    meta->weight_incoming += info->weight;
   }
 }
 
@@ -2136,6 +2160,7 @@ p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
   sc_MPI_Comm         mpicomm = internal->mpicomm;
   int                 errsend = 0;
   int                 err = 0;
+  size_t              weight_local;
   p4est_points_context_t *c = internal->c;
   const size_t        point_size = c->points->elem_size;
   p4est_transfer_meta_t resp;
@@ -2173,6 +2198,10 @@ p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
   SC_CHECK_MPI (mpiret);
   mpiret = sc_MPI_Comm_size (mpicomm, &num_procs);
   SC_CHECK_MPI (mpiret);
+
+  if (internal->compute_weights) {
+    weight_local = compute_local_point_weights (internal);
+  }
 
   /* use search_partition to put points in appropriate send buffers */
   /* record which processes p is sending points to and how many points each
