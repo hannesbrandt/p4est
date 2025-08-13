@@ -1495,6 +1495,8 @@ typedef struct p4est_transfer_meta
   size_t              num_incoming;
   /* weight of points that p receives in this iteration */
   size_t              weight_incoming;
+  /* weight of points that p receives from p in this iteration */
+  size_t              weight_already_local;
   /* size of all points sent and received */
   size_t              point_size;
   /* q -> {points that p is sending to q} */
@@ -2010,6 +2012,7 @@ compute_offsets_and_num_incoming (p4est_transfer_meta_t *meta)
   /* initialize offset array */
   meta->num_incoming = 0;
   meta->weight_incoming = 0;
+  meta->weight_already_local = 0;
   meta->offsets = P4EST_ALLOC (size_t, meta->senders->elem_count);
 
   /* compute offsets */
@@ -2017,7 +2020,14 @@ compute_offsets_and_num_incoming (p4est_transfer_meta_t *meta)
     meta->offsets[i] = meta->num_incoming * meta->point_size;
     info = (p4est_transfer_info_t *) sc_array_index_int (meta->sends_info, i);
     meta->num_incoming += info->count;
-    meta->weight_incoming += info->weight;
+    if (*(int *) sc_array_index_int (meta->senders, i) == meta->mpirank) {
+      /* if we count the weight of the message from our rank, we would end up
+       * counting points we already have available locally twice */
+      meta->weight_already_local += info->weight;
+    }
+    else {
+      meta->weight_incoming += info->weight;
+    }
   }
 }
 
