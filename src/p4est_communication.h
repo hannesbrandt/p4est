@@ -724,8 +724,7 @@ p4est_points_context_t;
  * calling process, as all other points would be deleted on entry of the next
  * call of \ref p4est_transfer_search anyways.
  */
-void                 p4est_init_points_context (p4est_points_context_t *c,
-                                                sc_array_t *points);
+p4est_points_context_t *p4est_new_points_context (sc_array_t *points);
 
 /** Collective, point-to-point transfer for maintaining distributed
  * collection of points. After communication, points are stored (only) on the

@@ -1658,9 +1658,11 @@ p4est_points_context_is_valid (p4est_points_context_t *c)
 
 #endif
 
-void
-p4est_init_points_context (p4est_points_context_t *c, sc_array_t *points)
+p4est_points_context_t *
+p4est_new_points_context (sc_array_t *points)
 {
+  p4est_points_context_t *c = P4EST_ALLOC (p4est_points_context_t, 1);
+
   /* take responsibility for complete points array */
   c->points = points;
   c->num_known = points->elem_count;
@@ -1671,6 +1673,8 @@ p4est_init_points_context (p4est_points_context_t *c, sc_array_t *points)
    * exceeded in the previous iteration. */
   c->resp_buffers = c->resp_receivers = c->resp_ratios = NULL;
   c->own_buffers = c->own_receivers = c->own_ratios = NULL;
+
+  return c;
 }
 
 static size_t
@@ -2528,4 +2532,5 @@ p4est_destroy_points_context (p4est_points_context_t *c)
     sc_array_destroy (c->own_receivers);
     sc_array_destroy (c->own_ratios);
   }
+  P4EST_FREE (c);
 }
