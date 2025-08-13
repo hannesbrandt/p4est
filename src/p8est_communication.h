@@ -673,6 +673,37 @@ typedef struct p8est_points_context
    * p8est_transfer_search is called with the \a save_unowned option.
    */
   p4est_locidx_t      num_unowned;
+
+    /* The following members are only relevant, if \ref p8est_transfer_search
+   * was called with a maximum weight and a matching point_weight_fn. In this
+   * case they contain information about all points that could not be sent to
+   * their destination because it would lead to the target process exceeding its
+   * maximum weight. */
+  /** An array containing send buffers in form of sc_array_t's. Each entry
+   * corresponds to a message that could not be sent to its destination and
+   * contains the points the target rank would have been responsible for. */
+  sc_array_t         *resp_buffers;
+
+  /** An array containing the target rank of the corresponding entry of
+   * \a resp_buffers.*/
+  sc_array_t         *resp_receivers;
+
+  /** An array containing the ratio by which the corresponding rank from
+   * \a resp_receivers exceeds its local max_weight. */
+  sc_array_t         *resp_ratios;
+
+  /** An array containing send buffers in form of sc_array_t's. Each entry
+   * corresponds to a message that could not be sent to its destination and
+   * contains points local to the target ranks, but not in its responsibility. */
+  sc_array_t         *own_buffers;
+
+  /** An array containing the target rank of the corresponding entry of
+   * \a own_buffers.*/
+  sc_array_t         *own_receivers;
+
+  /** An array containing the ratio by which the corresponding rank from
+   * \a own_receivers exceeds its local max_weight. */
+  sc_array_t         *own_ratios;
 }
 p8est_points_context_t;
 

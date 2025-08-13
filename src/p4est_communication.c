@@ -1509,6 +1509,8 @@ typedef struct p4est_transfer_meta
   sc_array_t         *recvs_ratios;
   /* mark, if we ecountered a message size error during setup */
   int                 errsend;
+  /* flag indiciating if at least one entry of \a recvs_ratios exceeds 1. */
+  int                 have_unsent;
 
   /* the mpicomm used for exchanging points */
   sc_MPI_Comm         mpicomm;
@@ -1664,6 +1666,11 @@ p4est_init_points_context (p4est_points_context_t *c, sc_array_t *points)
   c->num_known = points->elem_count;
   c->num_respon = points->elem_count;
   c->num_unowned = 0;
+
+  /* the following arrays are only used when a maximum weight was enforced and
+   * exceeded in the previous iteration. */
+  c->resp_buffers = c->resp_receivers = c->resp_ratios = NULL;
+  c->own_buffers = c->own_receivers = c->own_ratios = NULL;
 }
 
 static size_t
@@ -1949,6 +1956,14 @@ exchange_ratios (p4est_transfer_meta_t *meta)
   sc_MPI_Waitall (num_senders, send_reqs, sc_MPI_STATUSES_IGNORE);
   sc_MPI_Waitall (num_receivers, recv_reqs, sc_MPI_STATUSES_IGNORE);
 
+  /* check if we have at least one unsent message locally */
+  meta->have_unsent = 0;
+  for (ir = 0; ir < num_receivers; ir++) {
+    if (*(double *) sc_array_index (meta->recvs_ratios, ir) > 1.) {
+      meta->have_unsent = 1;
+    }
+  }
+
   /* cleanup */
   P4EST_FREE (recv_reqs);
   P4EST_FREE (send_reqs);
@@ -1965,7 +1980,8 @@ exchange_ratios (p4est_transfer_meta_t *meta)
  */
 static void
 post_sends (p4est_transfer_meta_t *meta,
-            p4est_transfer_internal_t *internal, sc_MPI_Request *req)
+            p4est_transfer_internal_t *internal, sc_MPI_Request *req,
+            sc_array_t *buffers, sc_array_t *receivers, sc_array_t *ratios)
 {
   int                 mpiret;
   int                 q;
@@ -1984,6 +2000,14 @@ post_sends (p4est_transfer_meta_t *meta,
       /* we do not send a message, if the target processes max_weight would be
        * exceeded */
       req[i] = sc_MPI_REQUEST_NULL;
+      /* push point buffer, target rank and ratio to the respective arrays */
+      memcpy (sc_array_push (buffers),
+              sc_array_index_int (meta->send_buffers, i),
+              sizeof (sc_array_t));
+      memcpy (sc_array_push (receivers),
+              sc_array_index_int (meta->receivers, i), sizeof (int));
+      memcpy (sc_array_push (ratios),
+              sc_array_index_int (meta->recvs_ratios, i), sizeof (double));
     }
     else {
       /* post non-blocking send of points to q */
@@ -2380,9 +2404,21 @@ p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
   /* initialize request array for outgoing messages */
   send_req = P4EST_ALLOC (sc_MPI_Request, num_send_reqs);
 
-  /* post non-blocking sends */
-  post_sends (&resp, internal, send_req);
-  post_sends (&own, internal, send_req + resp.receivers->elem_count);
+  /* post non-blocking sends and store unsent messages in point context */
+  if (resp.have_unsent) {
+    c->resp_buffers = sc_array_new (sizeof (sc_array_t));
+    c->resp_receivers = sc_array_new (sizeof (int));
+    c->resp_ratios = sc_array_new (sizeof (double));
+  }
+  if (own.have_unsent) {
+    c->own_buffers = sc_array_new (sizeof (sc_array_t));
+    c->own_receivers = sc_array_new (sizeof (int));
+    c->own_ratios = sc_array_new (sizeof (double));
+  }
+  post_sends (&resp, internal, send_req, c->resp_buffers, c->resp_receivers,
+              c->resp_ratios);
+  post_sends (&own, internal, send_req + resp.receivers->elem_count,
+              c->own_buffers, c->own_receivers, c->own_ratios);
 
   if (internal->save_unowned) {
     num_unowned = internal->unowned_points->elem_count;
@@ -2480,4 +2516,16 @@ p4est_destroy_points_context (p4est_points_context_t *c)
 {
   P4EST_ASSERT (c->points != NULL);
   sc_array_destroy_null (&c->points);
+  if (c->resp_buffers != NULL) {
+    P4EST_ASSERT (c->resp_receivers != NULL && c->resp_ratios != NULL);
+    sc_array_destroy (c->resp_buffers);
+    sc_array_destroy (c->resp_receivers);
+    sc_array_destroy (c->resp_ratios);
+  }
+  if (c->own_buffers != NULL) {
+    P4EST_ASSERT (c->own_receivers != NULL && c->own_ratios != NULL);
+    sc_array_destroy (c->own_buffers);
+    sc_array_destroy (c->own_receivers);
+    sc_array_destroy (c->own_ratios);
+  }
 }
