@@ -1592,6 +1592,8 @@ typedef struct p4est_transfer_internal
 {
   /* point-quadrant intersection function */
   p4est_intersect_t   intersect_fn;
+  /* array of points currently searched in the partition */
+  sc_array_t         *points;
   /* stores the last process we detected as intersecting each point */
   int                *last_procs;
   /* communication metadata */
@@ -1700,7 +1702,7 @@ compute_local_point_weights (p4est_transfer_internal_t *internal)
 /** Push point \a pi into the send buffer for \a receiver */
 static void
 push_to_send_buffer (p4est_transfer_meta_t *meta,
-                     p4est_points_context_t *c,
+                     sc_array_t *points,
                      p4est_transfer_internal_t *internal,
                      p4est_locidx_t pi, int receiver)
 {
@@ -1744,13 +1746,12 @@ push_to_send_buffer (p4est_transfer_meta_t *meta,
   }
 
   /* add point to send buffer */
-  memcpy (sc_array_push (b), sc_array_index (c->points, pi),
-          meta->point_size);
+  memcpy (sc_array_push (b), sc_array_index (points, pi), meta->point_size);
   info->count++;
   if (internal->compute_weights) {
     /* add the points' weight to the total weight for the receiver */
     info->weight +=
-      internal->point_weight_fn (sc_array_index (c->points, pi),
+      internal->point_weight_fn (sc_array_index (points, pi),
                                  internal->user_pointer);
   }
 }
@@ -1783,19 +1784,17 @@ transfer_search_point (p4est_t *p4est, p4est_topidx_t which_tree,
   p4est_transfer_meta_t *resp = internal->resp;
   p4est_transfer_meta_t *own = internal->own;
 
-  /* the points to search with and then transfer */
-  p4est_points_context_t *c = internal->c;
-
   /* last process which we recorded this point as being sent to */
   int                 last_proc;
 
-  /* point index */
-  p4est_locidx_t      pi = *(p4est_locidx_t *) point_index;
+  /* point index and points array */
+  size_t              pi = *(size_t *) point_index;
+  sc_array_t         *points = internal->points;
 
   /* sanity checks */
   P4EST_ASSERT (internal != NULL);
   P4EST_ASSERT (0 <= pfirst && pfirst <= plast);
-  P4EST_ASSERT (pi < c->num_respon);
+  P4EST_ASSERT (pi < points->elem_count);
 
   /* temporarily replace our internal context with the user supplied one */
   p4est->user_pointer = internal->user_pointer;
@@ -1803,8 +1802,7 @@ transfer_search_point (p4est_t *p4est, p4est_topidx_t which_tree,
   /* check if point intersects the quadrant */
   intersection_found = internal->intersect_fn (p4est, which_tree, quadrant,
                                                pfirst, plast,
-                                               sc_array_index (c->points,
-                                                               pi));
+                                               sc_array_index (points, pi));
 
   /* restore our internal context */
   p4est->user_pointer = internal;
@@ -1846,11 +1844,11 @@ transfer_search_point (p4est_t *p4est, p4est_topidx_t which_tree,
   if (last_proc == -1) {
     /* first process intersecting point should own it and be responsible for
        its propagation */
-    push_to_send_buffer (resp, c, internal, pi, pfirst);
+    push_to_send_buffer (resp, points, internal, pi, pfirst);
   }
   else {
     /* process should own point but not be responsible for its propagation */
-    push_to_send_buffer (own, c, internal, pi, pfirst);
+    push_to_send_buffer (own, points, internal, pi, pfirst);
   }
 
   /* end recursion */
@@ -1863,24 +1861,24 @@ transfer_search_point (p4est_t *p4est, p4est_topidx_t which_tree,
  * \param[in] num_procs number of MPI processes
  */
 static void
-compute_send_buffers (p4est_transfer_internal_t *internal)
+compute_send_buffers (p4est_transfer_internal_t *internal,
+                      sc_array_t *points)
 {
   sc_array_t         *search_objects;
-  p4est_points_context_t *c = internal->c;
-  p4est_locidx_t      il;
+  size_t              ip;
 
   /* Initialize last_procs to -1 to signify no points have been added to send
      buffers. */
   /* Here we are relying on the fact that the char -1 is 11111111 in bits,
      and so the resulting int array will be filled with -1. */
-  internal->last_procs = P4EST_ALLOC (int, c->num_respon);
-  memset (internal->last_procs, -1, c->num_respon * sizeof (int));
+  internal->last_procs = P4EST_ALLOC (int, points->elem_count);
+  memset (internal->last_procs, -1, points->elem_count * sizeof (int));
 
   /* set up search objects for partition search */
-  search_objects =
-    sc_array_new_count (sizeof (p4est_locidx_t), c->num_respon);
-  for (il = 0; il < c->num_respon; ++il) {
-    *(p4est_locidx_t *) sc_array_index (search_objects, il) = il;
+  internal->points = points;
+  search_objects = sc_array_new_count (sizeof (size_t), points->elem_count);
+  for (ip = 0; ip < points->elem_count; ++ip) {
+    *(size_t *) sc_array_index (search_objects, ip) = ip;
   }
 
   /* add points to the relevant send buffers (by partition search) */
@@ -1907,11 +1905,11 @@ compute_send_buffers (p4est_transfer_internal_t *internal)
 
   /* save points that do not intersect any process domain, if configured to */
   if (internal->save_unowned) {
-    for (il = 0; il < c->num_respon; ++il) {
-      if (internal->last_procs[il] == -1) {
+    for (ip = 0; ip < points->elem_count; ++ip) {
+      if (internal->last_procs[ip] == -1) {
         /* add point to unowned points buffer */
         memcpy (sc_array_push (internal->unowned_points),
-                sc_array_index (c->points, il), c->points->elem_size);
+                sc_array_index (points, ip), points->elem_size);
       }
     }
   }
@@ -2335,7 +2333,10 @@ p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
      INT_MAX bytes in an own or resp message to another process. We defer
      synchronising these errors until just before calling sc_notify_ext
      to avoid creating an unnecessary synchronisation point */
-  compute_send_buffers (internal);
+  sc_array_t         *points =
+    sc_array_new_view (c->points, 0, c->num_respon);
+  compute_send_buffers (internal, points);
+  sc_array_destroy (points);
   errsend = resp.errsend || own.errsend;
 
   /* sanity checks */
