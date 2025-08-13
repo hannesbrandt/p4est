@@ -2027,6 +2027,7 @@ update_offsets_and_num_incoming (p4est_transfer_meta_t *meta)
   size_t              is;
   p4est_transfer_info_t *info;
 
+  meta->num_incoming = 0;
   for (is = 0; is < meta->senders->elem_count; is++) {
     if (*(int *) sc_array_index (meta->senders, is) == meta->mpirank) {
       /* for a ratio larger than 1. only the points from a process to itself
