@@ -1556,21 +1556,30 @@ destroy_transfer_meta (p4est_transfer_meta_t *meta)
   size_t              ibz;
 
   /* destroy send data */
-  if (meta->receivers != NULL) {
-    sc_array_destroy_null (&meta->receivers);
-  }
   if (meta->recvs_info != NULL) {
     sc_array_destroy_null (&meta->recvs_info);
   }
-  if (meta->recvs_ratios != NULL) {
-    sc_array_destroy_null (&meta->recvs_ratios);
-  }
   if (meta->send_buffers != NULL) {
+    /* reset all messages that are not currently part of the point_context_t */
+    P4EST_ASSERT (meta->recvs_ratios != NULL
+                  && meta->recvs_ratios->elem_count ==
+                  meta->send_buffers->elem_count);
     for (ibz = 0; ibz < meta->send_buffers->elem_count; ibz++) {
-      sc_array_reset ((sc_array_t *)
-                      sc_array_index (meta->send_buffers, ibz));
+      if (*(double *) sc_array_index (meta->recvs_ratios, ibz) <= 1. ||
+          *(int *) sc_array_index (meta->receivers, ibz) == meta->mpirank) {
+        /* the point_context_t took ownership of all unsent arrays, so we can
+         * not reset them here */
+        sc_array_reset ((sc_array_t *)
+                        sc_array_index (meta->send_buffers, ibz));
+      }
     }
     sc_array_destroy_null (&meta->send_buffers);
+  }
+  if (meta->receivers != NULL) {
+    sc_array_destroy_null (&meta->receivers);
+  }
+  if (meta->recvs_ratios != NULL) {
+    sc_array_destroy_null (&meta->recvs_ratios);
   }
 
   /* destroy receive data */
@@ -2286,6 +2295,7 @@ p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
   const size_t        point_size = c->points->elem_size;
   p4est_transfer_meta_t resp;
   p4est_transfer_meta_t own;
+  size_t              ibz;
 
   /* Point context to communication metadata */
   internal->resp = &resp;
@@ -2301,6 +2311,16 @@ p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
   size_t              num_unowned = 0;
   /* number of incoming points */
   size_t              num_incoming;
+
+  /* Drop replicated points from old unsent messages */
+  if (c->own_buffers != NULL) {
+    for (ibz = 0; ibz < c->own_buffers->elem_count; ibz++) {
+      sc_array_reset ((sc_array_t *) sc_array_index (c->own_buffers, ibz));
+    }
+    sc_array_destroy_null (&c->own_buffers);
+    sc_array_destroy_null (&c->own_receivers);
+    sc_array_destroy_null (&c->own_ratios);
+  }
 
   /* Init metadata fields to NULL */
   init_transfer_meta (&resp, point_size, mpicomm);
@@ -2337,6 +2357,18 @@ p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
     sc_array_new_view (c->points, 0, c->num_respon);
   compute_send_buffers (internal, points);
   sc_array_destroy (points);
+
+  /* drop old unsent messages since we now searched their content in the new
+   * partition */
+  if (c->resp_buffers != NULL) {
+    for (ibz = 0; ibz < c->resp_buffers->elem_count; ibz++) {
+      sc_array_reset ((sc_array_t *) sc_array_index (c->resp_buffers, ibz));
+    }
+    sc_array_destroy_null (&c->resp_buffers);
+    sc_array_destroy_null (&c->resp_receivers);
+    sc_array_destroy_null (&c->resp_ratios);
+  }
+
   errsend = resp.errsend || own.errsend;
 
   /* sanity checks */
@@ -2519,16 +2551,24 @@ p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
 void
 p4est_destroy_points_context (p4est_points_context_t *c)
 {
+  size_t              ibz;
+
   P4EST_ASSERT (c->points != NULL);
   sc_array_destroy_null (&c->points);
   if (c->resp_buffers != NULL) {
     P4EST_ASSERT (c->resp_receivers != NULL && c->resp_ratios != NULL);
+    for (ibz = 0; ibz < c->resp_buffers->elem_count; ibz++) {
+      sc_array_reset ((sc_array_t *) sc_array_index (c->resp_buffers, ibz));
+    }
     sc_array_destroy (c->resp_buffers);
     sc_array_destroy (c->resp_receivers);
     sc_array_destroy (c->resp_ratios);
   }
   if (c->own_buffers != NULL) {
     P4EST_ASSERT (c->own_receivers != NULL && c->own_ratios != NULL);
+    for (ibz = 0; ibz < c->own_buffers->elem_count; ibz++) {
+      sc_array_reset ((sc_array_t *) sc_array_index (c->own_buffers, ibz));
+    }
     sc_array_destroy (c->own_buffers);
     sc_array_destroy (c->own_receivers);
     sc_array_destroy (c->own_ratios);
