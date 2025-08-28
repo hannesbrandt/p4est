@@ -1691,8 +1691,9 @@ p4est_new_points_context (sc_array_t * points)
 static size_t
 compute_local_point_weights (p4est_transfer_internal_t *internal)
 {
-  size_t              ip;
+  size_t              ip, ib, ibp;
   size_t              weight_local;
+  sc_array_t         *buffer;
 
   /* the points to compute the weight of */
   p4est_points_context_t *c = internal->c;
@@ -1703,6 +1704,15 @@ compute_local_point_weights (p4est_transfer_internal_t *internal)
   for (ip = 0; ip < (size_t) c->num_respon; ip++) {
     weight_local += internal->point_weight_fn (sc_array_index (c->points, ip),
                                                internal->user_pointer);
+  }
+  if (c->resp_buffers != NULL) {
+    for (ib = 0; ib < c->resp_buffers->elem_count; ib++) {
+      buffer = (sc_array_t *) sc_array_index (c->resp_buffers, ib);
+      for (ibp = 0; ibp < buffer->elem_count; ibp++) {
+        weight_local += internal->point_weight_fn (sc_array_index (buffer, ibp),
+                                                   internal->user_pointer);
+      }
+    }
   }
 
   return weight_local;
