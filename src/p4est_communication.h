@@ -690,6 +690,13 @@ typedef struct p4est_points_context
    * case they contain information about all points that could not be sent to
    * their destination because it would lead to the target process exceeding its
    * maximum weight. */
+  /** The ratio by which the available local space, determined by subtracting
+   * the input of previously local triangles from the maximum weight, would
+   * be exceeded by the incoming triangle messages. A value of 1 or lower
+   * indicates that all triangles fit locally and thus were also correctly
+   * transmitted and stored in \a points. */
+  double ratio;
+
   /** An array containing send buffers in form of sc_array_t's. Each entry
    * corresponds to a message that could not be sent to its destination and
    * contains the points the target rank would have been responsible for. */

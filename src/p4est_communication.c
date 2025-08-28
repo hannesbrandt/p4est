@@ -1709,8 +1709,9 @@ compute_local_point_weights (p4est_transfer_internal_t *internal)
     for (ib = 0; ib < c->resp_buffers->elem_count; ib++) {
       buffer = (sc_array_t *) sc_array_index (c->resp_buffers, ib);
       for (ibp = 0; ibp < buffer->elem_count; ibp++) {
-        weight_local += internal->point_weight_fn (sc_array_index (buffer, ibp),
-                                                   internal->user_pointer);
+        weight_local +=
+          internal->point_weight_fn (sc_array_index (buffer, ibp),
+                                     internal->user_pointer);
       }
     }
   }
@@ -1770,11 +1771,11 @@ push_to_send_buffer (p4est_transfer_meta_t *meta,
   info->count++;
   if (internal->compute_weights) {
     /* add the points' weight to the total weight for the receiver */
-    info->weight +=
-      internal->
-      point_weight_fn (*(void **)
-                       sc_array_index (internal->point_references, pi),
-                       internal->user_pointer);
+    info->weight += internal->point_weight_fn (*(void **)
+                                               sc_array_index (internal->
+                                                               point_references,
+                                                               pi),
+                                               internal->user_pointer);
   }
 }
 
@@ -1821,11 +1822,10 @@ transfer_search_point (p4est_t *p4est, p4est_topidx_t which_tree,
 
   /* check if point intersects the quadrant */
   intersection_found = internal->intersect_fn (p4est, which_tree, quadrant,
-                                               pfirst, plast,
-                                               *(void **)
-                                               sc_array_index (internal->
-                                                               point_references,
-                                                               pi));
+                                               pfirst, plast, *(void **)
+                                               sc_array_index
+                                               (internal->point_references,
+                                                pi));
 
   /* restore our internal context */
   p4est->user_pointer = internal;
@@ -2457,7 +2457,7 @@ p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
      * incoming points in order to stay below max_weight, even if we can not
      * send any of the local points to another process and thus have to keep
      * all of them */
-    resp.ratio = own.ratio =
+    c->ratio = resp.ratio = own.ratio =
       ((double) resp.weight_incoming +
        own.weight_incoming) / (internal->max_weight - weight_local);
 
