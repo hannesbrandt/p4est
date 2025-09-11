@@ -684,7 +684,17 @@ typedef struct p8est_points_context
    * be exceeded by the incoming triangle messages. A value of 1 or lower
    * indicates that all triangles fit locally and thus were also correctly
    * transmitted and stored in \a points. */
-  double ratio;
+  double              ratio;
+
+  /** An array only created if \a ratio is above 1. In this case it contains all
+   * ranks which own points which should be in the responsibility of this
+   * process, but could not be sent. */
+  sc_array_t         *resp_senders;
+
+  /** An array only created if \a ratio is above 1. In this case it contains all
+   * ranks which own point which would be local to this process, but not in its
+   * responsibility. */
+  sc_array_t         *own_senders;
 
   /** An array containing send buffers in form of sc_array_t's. Each entry
    * corresponds to a message that could not be sent to its destination and

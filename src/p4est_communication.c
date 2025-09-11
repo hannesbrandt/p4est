@@ -1682,8 +1682,9 @@ p4est_new_points_context (sc_array_t * points)
 
   /* the following arrays are only used when a maximum weight was enforced and
    * exceeded in the previous iteration. */
-  c->resp_buffers = c->resp_receivers = c->resp_ratios = NULL;
-  c->own_buffers = c->own_receivers = c->own_ratios = NULL;
+  c->resp_buffers = c->resp_receivers = c->resp_ratios = c->resp_senders =
+    NULL;
+  c->own_buffers = c->own_receivers = c->own_ratios = c->own_senders = NULL;
 
   return c;
 }
@@ -2110,6 +2111,24 @@ compute_offsets_and_num_incoming (p4est_transfer_meta_t *meta)
   }
 }
 
+static sc_array_t  *
+copy_senders_without_own_rank (p4est_transfer_meta_t *meta)
+{
+  sc_array_t         *senders;
+  size_t              is;
+  int                 rank;
+
+  /* copy all senders with are not the local mpirank */
+  senders = sc_array_new (sizeof (int));
+  for (is = 0; is < meta->senders->elem_count; is++) {
+    rank = *(int *) sc_array_index (meta->senders, is);
+    if (rank != meta->mpirank) {
+      *(int *) sc_array_push (senders) = rank;
+    }
+  }
+  return senders;
+}
+
 static void
 update_offsets_and_num_incoming (p4est_transfer_meta_t *meta)
 {
@@ -2409,6 +2428,15 @@ p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
     sc_array_destroy_null (&c->resp_receivers);
     sc_array_destroy_null (&c->resp_ratios);
   }
+  /* also drop old sender arrays, as they change with the partition */
+  if (c->resp_senders != NULL) {
+    P4EST_ASSERT (c->ratio > 1.);
+    sc_array_destroy_null (&c->resp_senders);
+  }
+  if (c->own_senders != NULL) {
+    P4EST_ASSERT (c->ratio > 1.);
+    sc_array_destroy_null (&c->own_senders);
+  }
 
   errsend = resp.errsend || own.errsend;
 
@@ -2461,11 +2489,15 @@ p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
       ((double) resp.weight_incoming +
        own.weight_incoming) / (internal->max_weight - weight_local);
 
-    if (resp.ratio > 1.) {
+    if (c->ratio > 1.) {
       /* adapt buffers to only allocate space for the message from this rank
        * to itself, as all other messages will not be sent */
       update_offsets_and_num_incoming (&resp);
       update_offsets_and_num_incoming (&own);
+
+      /* store sender arrays in point structure */
+      c->resp_senders = copy_senders_without_own_rank (&resp);
+      c->own_senders = copy_senders_without_own_rank (&own);
     }
 
     /* send the ratio to all processes that this process will receive messages
@@ -2613,6 +2645,14 @@ p4est_destroy_points_context (p4est_points_context_t *c)
     sc_array_destroy (c->own_buffers);
     sc_array_destroy (c->own_receivers);
     sc_array_destroy (c->own_ratios);
+  }
+  if (c->resp_senders != NULL) {
+    P4EST_ASSERT (c->ratio > 1.);
+    sc_array_destroy (c->resp_senders);
+  }
+  if (c->own_senders != NULL) {
+    P4EST_ASSERT (c->ratio > 1.);
+    sc_array_destroy (c->own_senders);
   }
   P4EST_FREE (c);
 }
