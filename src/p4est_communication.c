@@ -2008,7 +2008,7 @@ exchange_ratios (p4est_transfer_meta_t *meta)
     SC_CHECK_MPI (mpiret);
   }
 
-  /* wait for communicatio to complete */
+  /* wait for communication to complete */
   sc_MPI_Waitall (num_senders, send_reqs, sc_MPI_STATUSES_IGNORE);
   sc_MPI_Waitall (num_receivers, recv_reqs, sc_MPI_STATUSES_IGNORE);
 
@@ -2053,7 +2053,7 @@ post_sends (p4est_transfer_meta_t *meta,
     }
     else if (internal->compute_weights
              && *(double *) sc_array_index (meta->recvs_ratios, i) > 1.) {
-      /* we do not send a message, if the target processes max_weight would be
+      /* we do not send a message, if the target processes' max_weight would be
        * exceeded */
       req[i] = sc_MPI_REQUEST_NULL;
       /* push point buffer, target rank and ratio to the respective arrays */
@@ -2118,7 +2118,7 @@ copy_senders_without_own_rank (p4est_transfer_meta_t *meta)
   size_t              is;
   int                 rank;
 
-  /* copy all senders with are not the local mpirank */
+  /* copy all senders which are not the local mpirank */
   senders = sc_array_new (sizeof (int));
   for (is = 0; is < meta->senders->elem_count; is++) {
     rank = *(int *) sc_array_index (meta->senders, is);
@@ -2138,10 +2138,10 @@ update_offsets_and_num_incoming (p4est_transfer_meta_t *meta)
   meta->num_incoming = 0;
   for (is = 0; is < meta->senders->elem_count; is++) {
     if (*(int *) sc_array_index (meta->senders, is) == meta->mpirank) {
-      /* for a ratio larger than 1. only the points from a process to itself
+      /* For a ratio larger than 1. only the points from a process for itself
        * will be correctly transfered to the new points buffer. We can achieve
-       * this by updating num_incoming and resetting the offset of this ranks
-       * message to be at the beginning of the send_buffer */
+       * this by updating num_incoming and resetting the offset of this rank's
+       * message to be at the beginning of the send_buffer. */
       info = (p4est_transfer_info_t *) sc_array_index (meta->sends_info, is);
       meta->num_incoming = info->count;
       meta->offsets[is] = 0;
@@ -2150,7 +2150,7 @@ update_offsets_and_num_incoming (p4est_transfer_meta_t *meta)
 }
 
 /** Post non-blocking receives for senders in the given communication data.
- *  If there is a message for ourself then we copy it manually here rather
+ *  If there is a message for ourselves, then we copy it manually here rather
  *  than receiving it through MPI.
  *
  *  We expect to receive points from each sender in meta->senders. The number
@@ -2418,8 +2418,8 @@ p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
      to avoid creating an unnecessary synchronisation point */
   compute_send_buffers (internal);
 
-  /* drop old unsent messages since we now searched their content in the new
-   * partition */
+  /* drop old unsent messages since we already distributed them to send
+   * buffers according to the new partition. */
   if (c->resp_buffers != NULL) {
     for (ibz = 0; ibz < c->resp_buffers->elem_count; ibz++) {
       sc_array_reset ((sc_array_t *) sc_array_index (c->resp_buffers, ibz));
