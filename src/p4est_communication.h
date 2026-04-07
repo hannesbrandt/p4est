@@ -582,11 +582,11 @@ void                p4est_transfer_items_end (p4est_transfer_context_t * tc);
  */
 void                p4est_transfer_end (p4est_transfer_context_t * tc);
 
-/** Callback function for \ref p4est_transfer_search, as well as its variants
- * \ref p4est_transfer_search_gfx and \ref p4est_transfer_search_gfp. It will
- * be used in a partition search, similar to a \ref p4est_search_partition_t.
+/** Callback function for \ref p4est_transfer_search, as well as its variant
+ * \ref p4est_transfer_search_gfp. It will be used in a partition search,
+ * similar to a \ref p4est_search_partition_t.
  *
- * \param[in] p4est         In the versions of transfer search not requiring an
+ * \param[in] p4est         In the version of transfer search not requiring an
  *                          explicit p4est this is a dummy p4est where only the
  *                          user pointer is initialized.
  * \param[in] which_tree    Number of the tree containing \a quadrant.
@@ -608,8 +608,8 @@ typedef int         (*p4est_intersect_t) (p4est_t *p4est,
                                           int pfirst, int plast, void *point);
 
 /** Callback function to compute the weight of a point in
- * \ref p4est_transfer_search, as well as its variants
- * \ref p4est_transfer_search_gfx and \ref p4est_transfer_search_gfp.
+ * \ref p4est_transfer_search, as well as its variant
+ * \ref p4est_transfer_search_gfp.
  *
  * \param[in] point         The point for which the weight needs to be computed.
  * \param[in] user          Pointer to user-provided context data.
@@ -801,49 +801,9 @@ int                 p4est_transfer_search (p4est_t *p4est,
  *
  * This function is collective.
  *
- * \param [in] gfq          Partition offsets to traverse.  Length \a nmemb + 1.
  * \param [in] gfp          Partition position to traverse.  Length \a nmemb + 1.
- * \param [in] nmemb        Number of processors encoded in \a gfq (plus one).
- * \param [in] num_trees    Tree number must match the contents of \a gfq.
- * \param [in] user_pointer Passed to the intersection and the point weight
- *                          callback.
- * \param [in] mpicomm      Function is collective over the communicator.
- * \param [in,out] c        Points and propagation responsibilities. The
- *                          array \a c.points is destroyed and reallocated,
- *                          so pointers to it should not be referenced after
- *                          this function has been called.
- * \param [in] intersect    Intersection callback.
- * \param [in] save_unowned If true then points that would be unowned are
- *                          maintained by their propagating process
- * \return                  0 if transfer was successful.
- */
-int                 p4est_transfer_search_gfx (const p4est_gloidx_t *gfq,
-                                               const p4est_quadrant_t *gfp,
-                                               int nmemb,
-                                               p4est_topidx_t num_trees,
-                                               void *user_pointer,
-                                               sc_MPI_Comm mpicomm,
-                                               p4est_points_context_t *c,
-                                               p4est_intersect_t intersect_fn,
-                                               size_t max_weight,
-                                               p4est_point_weight_t
-                                               point_weight_fn,
-                                               int save_unowned);
-
-/** The same as \ref p4est_transfer_search, except that we search with a
- * partition, rather than an explicit p4est. The partition can be that of any
- * p4est, not necessarily known to the caller.
- *
- * This function is similar to \ref p4est_transfer_search_gfx, but does not
- * require the \ref p4est_gloidx_t array gfq. If gfq is available, using
- * \ref p4est_transfer_search_gfx is recommended, because it is slightly
- * faster.
- *
- * This function is collective.
- *
- * \param [in] gfp          Partition position to traverse.  Length \a nmemb + 1.
- * \param [in] nmemb        Number of processors encoded in \a gfq (plus one).
- * \param [in] num_trees    Tree number must match the contents of \a gfq.
+ * \param [in] nmemb        Number of processors encoded in \a gfp (plus one).
+ * \param [in] num_trees    Tree number must match the contents of \a gfp.
  * \param [in] user_pointer Passed to the intersection and the point weight
  *                          callback.
  * \param [in] mpicomm      Function is collective over the communicator.

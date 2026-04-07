@@ -1614,7 +1614,7 @@ typedef struct p4est_transfer_internal
   /* user context passed in a p4est to intersect */
   void               *user_pointer;
 
-  /* p4est data - NULL if running gfx/gfp */
+  /* p4est data - NULL if running gfp */
   p4est_t            *p4est;
 
   /* weight computation */
@@ -1624,13 +1624,11 @@ typedef struct p4est_transfer_internal
   p4est_point_weight_t point_weight_fn; /* callback to compute point weights */
 
   /* data needed if we do not have a full p4est */
-  /* global first quadrant array - NULL if running gfp */
-  const p4est_gloidx_t *gfq;
   /* global first position array */
   const p4est_quadrant_t *gfp;
-  /* number of processors encoded in gfq (plus one). */
+  /* number of processors encoded in gfp (plus one). */
   int                 nmemb;
-  /* tree number matching the contents of gfq */
+  /* tree number matching the contents of gfp */
   p4est_topidx_t      num_trees;
   /* MPI communicator */
   sc_MPI_Comm         mpicomm;
@@ -1940,15 +1938,10 @@ compute_send_buffers (p4est_transfer_internal_t *internal)
     p4est_search_partition (internal->p4est, 0, NULL, transfer_search_point,
                             search_objects);
   }
-  else if (internal->gfq != NULL) {
-    /* We are running p4est_transfer_search_gfx  */
-    /* Run search to add points to buffers */
-    p4est_search_partition_gfx (internal->gfq, internal->gfp, internal->nmemb,
-                                internal->num_trees, 0, internal, NULL,
-                                transfer_search_point, search_objects);
-  }
   else {
     /* We are running p4est_transfer_search_gfp */
+    P4EST_ASSERT (internal->gfp != NULL);
+
     /* Run search to add points to buffers */
     p4est_search_partition_gfp (internal->gfp, internal->nmemb,
                                 internal->num_trees, 0, internal, NULL,
@@ -2215,11 +2208,10 @@ post_receives (p4est_transfer_meta_t *meta,
   }
 }
 
-/** Central execution pathway for p4est_transfer_search,
- * p4est_transfer_search_gfx and p4est_transfer_search_gfp.
+/** Central execution pathway for p4est_transfer_search and
+ * p4est_transfer_search_gfp.
  *
- * \param[in] p4est Value of NULL indicates we are running gfx or gfp.
- * \param[in] gfq Value of NULL indicates we are running gfp.
+ * \param[in] p4est Value of NULL indicates we are running gfp.
  * \param[in] nmemb Number of processors encoded in \a gfp (plus one).
  * \param[in] num_trees Tree number must match the contents of \a gfp.
  */
@@ -2249,7 +2241,6 @@ p4est_transfer_search (p4est_t *p4est, p4est_points_context_t *c,
 
   /* These variables are not used because internal.p4est is not NULL */
   internal.gfp = NULL;
-  internal.gfq = NULL;
   internal.nmemb = -1;
   internal.num_trees = -1;
 
@@ -2266,44 +2257,6 @@ p4est_transfer_search (p4est_t *p4est, p4est_points_context_t *c,
 
   /* Return 0 if transfer was successful */
   return err;
-}
-
-int
-p4est_transfer_search_gfx (const p4est_gloidx_t *gfq,
-                           const p4est_quadrant_t *gfp,
-                           int nmemb, p4est_topidx_t num_trees,
-                           void *user_pointer,
-                           sc_MPI_Comm mpicomm,
-                           p4est_points_context_t *c,
-                           p4est_intersect_t intersect_fn, size_t max_weight,
-                           p4est_point_weight_t point_weight_fn,
-                           int save_unowned)
-{
-  /* Init internal context */
-  p4est_transfer_internal_t internal;
-  memset (&internal, 0, sizeof (internal));
-
-  /* Assign context information */
-  P4EST_ASSERT (p4est_points_context_is_valid (c));
-  internal.c = c;
-  internal.intersect_fn = intersect_fn;
-  internal.max_weight = max_weight;
-  internal.point_weight_fn = point_weight_fn;
-  internal.user_pointer = user_pointer;
-  internal.mpicomm = mpicomm;
-  internal.save_unowned = save_unowned;
-
-  /* Indicates that we are not searching with an actual p4est */
-  internal.p4est = NULL;
-
-  /* Fields needed for search_partition_gfx */
-  internal.gfq = gfq;
-  internal.gfp = gfp;
-  internal.nmemb = nmemb;
-  internal.num_trees = num_trees;
-
-  /* Enter transfer search */
-  return p4est_transfer_search_internal (&internal);
 }
 
 int
@@ -2332,9 +2285,6 @@ p4est_transfer_search_gfp (const p4est_quadrant_t *gfp, int nmemb,
 
   /* Indicates that we are not searching with an actual p4est */
   internal.p4est = NULL;
-
-  /* Indicates that we do not have a gfq */
-  internal.gfq = NULL;
 
   /* Fields needed for search_partition_gfp */
   internal.gfp = gfp;
