@@ -1654,10 +1654,10 @@ p4est_queries_context_is_valid (p4est_queries_context_t *c)
   count = c->queries->elem_count;
 
   /* the range entries must be consistent */
-  if (!(0 <= c->num_outside && c->num_outside <= c->num_respon)) {
+  if (!(0 <= c->num_outside && c->num_outside <= c->num_resp)) {
     return 0;
   }
-  if ((size_t) c->num_respon > count) {
+  if ((size_t) c->num_resp > count) {
     return 0;
   }
 
@@ -1674,7 +1674,7 @@ p4est_queries_context_new (sc_array_t * queries)
 
   /* take responsibility for complete queries array */
   c->queries = queries;
-  c->num_respon = queries->elem_count;
+  c->num_resp = queries->elem_count;
   c->num_outside = 0;
 
   /* the following arrays are only used when a maximum weight was enforced and
@@ -1698,8 +1698,8 @@ compute_local_query_weights (p4est_transfer_internal_t *internal)
 
   /* loop over all responsible queries and add their weights */
   weight_local = 0;
-  P4EST_ASSERT ((size_t) c->num_respon <= c->queries->elem_count);
-  for (iq = 0; iq < (size_t) c->num_respon; iq++) {
+  P4EST_ASSERT ((size_t) c->num_resp <= c->queries->elem_count);
+  for (iq = 0; iq < (size_t) c->num_resp; iq++) {
     weight_local +=
       internal->query_weight_fn (sc_array_index (c->queries, iq),
                                  internal->user_pointer);
@@ -1893,7 +1893,7 @@ compute_send_buffers (p4est_transfer_internal_t *internal)
 
   /* compute total number of queries entering the search either from the query
    * struct or the remaining send buffers from previous iterations */
-  num_queries = c->num_respon;
+  num_queries = c->num_resp;
   if (c->resp_buffers != NULL) {
     /* do not search dup_buffers again, as they contain duplicated queries */
     for (ib = 0; ib < c->resp_buffers->elem_count; ib++) {
@@ -1918,7 +1918,7 @@ compute_send_buffers (p4est_transfer_internal_t *internal)
   /* set up addresses of search objects */
   internal->query_references =
     sc_array_new_count (sizeof (void *), num_queries);
-  for (iq = 0; iq < (size_t) c->num_respon; iq++) {
+  for (iq = 0; iq < (size_t) c->num_resp; iq++) {
     *(void **) sc_array_index (internal->query_references, iq) =
       sc_array_index (c->queries, iq);
   }
@@ -2520,7 +2520,7 @@ p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
   sc_array_destroy_null (&c->queries);
 
   /* update count of queries we are responsible for */
-  c->num_respon = (p4est_locidx_t) (resp.num_incoming + num_outside);
+  c->num_resp = (p4est_locidx_t) (resp.num_incoming + num_outside);
 
   /* update count of *outside* queries we are responsible for */
   c->num_outside = (p4est_locidx_t) num_outside;

@@ -624,7 +624,7 @@ typedef size_t      (*p4est_query_weight_t) (void *query, void *user);
  * or geodesics.
  *
  * The \a queries array is subdivided into two sub-arrays. The first sub-array,
- * consisting of the first \a num_respon consecutive elements, contains the
+ * consisting of the first \a num_resp consecutive elements, contains the
  * queries that this process is responsible for propagating during
  * \ref p4est_transfer_search. The second sub-array, consisting of the
  * remaining elements, contains the queries known to this process that it is
@@ -634,7 +634,7 @@ typedef size_t      (*p4est_query_weight_t) (void *query, void *user);
  * queries are the first \a num_outside queries of the array.
  *
  * This structure is intended to be initialised on each process, storing a
- * disjoint subset of the global set of queries. Initially, \a num_respon
+ * disjoint subset of the global set of queries. Initially, \a num_resp
  * should be set to the length of \a queries so that each each process is
  * responsible for propagating all of the queries it knows. Users initializing
  * in other ways should be aware that if no process is responsible for
@@ -643,15 +643,15 @@ typedef size_t      (*p4est_query_weight_t) (void *query, void *user);
  * responsible for propagating a query then it will be duplicated.
  *
  * Calling \ref p4est_transfer_search performs the transfer of queries and
- * updates \a num_respon, while preserving the property that each query has
+ * updates \a num_resp, while preserving the property that each query has
  * exactly one process responsible for propagating it.
  *
  * Users may modify the queries array between calls to
  * \ref p4est_transfer_search. For example, query coordinates could
  * be modified to represent movement of queries as a simulation evolves through
  * time. Care should be taken when adding or deleting queries, and when
- * modifying the order of \a queries, to ensure that \a num_respon is updated
- * and that the first \a num_respon queries are still the queries that the
+ * modifying the order of \a queries, to ensure that \a num_resp is updated
+ * and that the first \a num_resp queries are still the queries that the
  * process should propagate.
  *
  * During the transfer of queries in \ref p4est_transfer_search the \a queries
@@ -671,9 +671,9 @@ typedef struct p4est_queries_context
 
   /** The number of queries this process is responsible for propagating when
    * \ref p4est_transfer_search is called.  These queries are stored in the
-   * first \a num_respon positions of \a queries.
+   * first \a num_resp positions of \a queries.
    */
-  p4est_locidx_t      num_respon;
+  p4est_locidx_t      num_resp;
 
   /** The number of outside queries that this process is responsible for
    * propagating.  These queries are stored in the first \a num_outside
