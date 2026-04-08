@@ -694,8 +694,10 @@ typedef struct p8est_queries_context
 
   /** An array only created if \a ratio is above 1. In this case it contains all
    * ranks which own queries which would be local to this process, but not in
-   * its responsibility. */
-  sc_array_t         *own_senders;
+   * its responsiblity. So, this process would only have received a duplicate of
+   * the queries. */
+
+  sc_array_t         *dup_senders;
 
   /** An array containing send buffers in form of sc_array_t's. Each entry
    * corresponds to a message that could not be sent to its destination and
@@ -714,15 +716,15 @@ typedef struct p8est_queries_context
    * corresponds to a message that could not be sent to its destination and
    * contains queries local to the target ranks, but not in its responsibility.
    */
-  sc_array_t         *own_buffers;
+  sc_array_t         *dup_buffers;
 
   /** An array containing the target rank of the corresponding entry of
-   * \a own_buffers.*/
-  sc_array_t         *own_receivers;
+   * \a dup_buffers.*/
+  sc_array_t         *dup_receivers;
 
   /** An array containing the ratio by which the corresponding rank from
-   * \a own_receivers exceeds its local max_weight. */
-  sc_array_t         *own_ratios;
+   * \a dup_receivers exceeds its local max_weight. */
+  sc_array_t         *dup_ratios;
 }
 p8est_queries_context_t;
 
