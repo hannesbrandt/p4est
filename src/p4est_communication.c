@@ -1607,8 +1607,8 @@ typedef struct p4est_transfer_internal
   int                *last_procs;
   /* communication metadata */
   p4est_transfer_meta_t *resp, *own;
-  /* unowned queries buffer */
-  sc_array_t         *unowned_queries;
+  /* outside queries buffer */
+  sc_array_t         *outside_queries;
   /* the data to search with and then transfer */
   p4est_queries_context_t *c;
   /* user context passed in a p4est to intersect */
@@ -1634,7 +1634,7 @@ typedef struct p4est_transfer_internal
   sc_MPI_Comm         mpicomm;
 
   /* config option to save queries not owned by any process */
-  int                 save_unowned;
+  int                 save_outside;
 }
 p4est_transfer_internal_t;
 
@@ -1654,7 +1654,7 @@ p4est_queries_context_is_valid (p4est_queries_context_t *c)
   count = c->queries->elem_count;
 
   /* the range entries must be consistent */
-  if (!(0 <= c->num_unowned && c->num_unowned <= c->num_respon)) {
+  if (!(0 <= c->num_outside && c->num_outside <= c->num_respon)) {
     return 0;
   }
   if (!(c->num_respon <= c->num_known && (size_t) c->num_known == count)) {
@@ -1676,7 +1676,7 @@ p4est_queries_context_new (sc_array_t * queries)
   c->queries = queries;
   c->num_known = queries->elem_count;
   c->num_respon = queries->elem_count;
-  c->num_unowned = 0;
+  c->num_outside = 0;
 
   /* the following arrays are only used when a maximum weight was enforced and
    * exceeded in the previous iteration. */
@@ -1950,11 +1950,11 @@ compute_send_buffers (p4est_transfer_internal_t *internal)
   }
 
   /* save queries that do not intersect any process domain, if configured to */
-  if (internal->save_unowned) {
+  if (internal->save_outside) {
     for (iq = 0; iq < (size_t) num_queries; ++iq) {
       if (internal->last_procs[iq] == -1) {
-        /* add query to unowned queries buffer */
-        memcpy (sc_array_push (internal->unowned_queries),
+        /* add query to outside queries buffer */
+        memcpy (sc_array_push (internal->outside_queries),
                 *(void **) sc_array_index (internal->query_references, iq),
                 c->queries->elem_size);
       }
@@ -2222,7 +2222,7 @@ static int
 int
 p4est_transfer_search (p4est_t *p4est, p4est_queries_context_t *c,
                        p4est_intersect_t intersect_fn, size_t max_weight,
-                       p4est_query_weight_t query_weight_fn, int save_unowned)
+                       p4est_query_weight_t query_weight_fn, int save_outside)
 {
   int                 err;
 
@@ -2238,7 +2238,7 @@ p4est_transfer_search (p4est_t *p4est, p4est_queries_context_t *c,
   internal.query_weight_fn = query_weight_fn;
   internal.p4est = p4est;
   internal.mpicomm = p4est->mpicomm;
-  internal.save_unowned = save_unowned;
+  internal.save_outside = save_outside;
 
   /* These variables are not used because internal.p4est is not NULL */
   internal.gfp = NULL;
@@ -2268,7 +2268,7 @@ p4est_transfer_search_gfp (const p4est_quadrant_t *gfp, int nmemb,
                            p4est_queries_context_t *c,
                            p4est_intersect_t intersect_fn, size_t max_weight,
                            p4est_query_weight_t query_weight_fn,
-                           int save_unowned)
+                           int save_outside)
 {
   /* Init internal context */
   p4est_transfer_internal_t internal;
@@ -2282,7 +2282,7 @@ p4est_transfer_search_gfp (const p4est_quadrant_t *gfp, int nmemb,
   internal.query_weight_fn = query_weight_fn;
   internal.user_pointer = user_pointer;
   internal.mpicomm = mpicomm;
-  internal.save_unowned = save_unowned;
+  internal.save_outside = save_outside;
 
   /* Indicates that we are not searching with an actual p4est */
   internal.p4est = NULL;
@@ -2321,8 +2321,8 @@ p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
   /* requests for receiving from senders */
   sc_MPI_Request     *recv_req = NULL;
   int                 num_recv_reqs;
-  /* number of unowned queries that this process will store */
-  size_t              num_unowned = 0;
+  /* number of outside queries that this process will store */
+  size_t              num_outside = 0;
   /* number of incoming queries */
   size_t              num_incoming;
 
@@ -2343,9 +2343,9 @@ p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
   /* check, if we want to compute weights throughout the transfer */
   internal->compute_weights = (internal->query_weight_fn != NULL);
 
-  /* Init unowned queries store */
-  if (internal->save_unowned) {
-    internal->unowned_queries = sc_array_new (query_size);
+  /* Init outside queries store */
+  if (internal->save_outside) {
+    internal->outside_queries = sc_array_new (query_size);
   }
 
   /* Get rank and total process count */
@@ -2405,8 +2405,8 @@ p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
   /* if any process had an error we clean up and exit */
   if (err) {
     /* clean up send data */
-    if (internal->unowned_queries != NULL) {
-      sc_array_destroy_null (&internal->unowned_queries);
+    if (internal->outside_queries != NULL) {
+      sc_array_destroy_null (&internal->outside_queries);
     }
     destroy_transfer_meta (&resp);
     destroy_transfer_meta (&own);
@@ -2481,12 +2481,12 @@ p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
   post_sends (&own, internal, send_req + resp.receivers->elem_count,
               c->own_buffers, c->own_receivers, c->own_ratios);
 
-  if (internal->save_unowned) {
-    num_unowned = internal->unowned_queries->elem_count;
+  if (internal->save_outside) {
+    num_outside = internal->outside_queries->elem_count;
   }
 
   /* total number of queries that we are receiving */
-  num_incoming = num_unowned + resp.num_incoming + own.num_incoming;
+  num_incoming = num_outside + resp.num_incoming + own.num_incoming;
 
   /* check that we do not receive more than P4EST_LOCIDX_MAX queries */
   if (num_incoming > (size_t) P4EST_LOCIDX_MAX) {
@@ -2504,8 +2504,8 @@ p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
   /* if any process had an error we clean up and exit */
   if (err) {
     /* clean up send data */
-    if (internal->unowned_queries != NULL) {
-      sc_array_destroy_null (&internal->unowned_queries);
+    if (internal->outside_queries != NULL) {
+      sc_array_destroy_null (&internal->outside_queries);
     }
     destroy_transfer_meta (&resp);
     destroy_transfer_meta (&own);
@@ -2520,10 +2520,10 @@ p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
   sc_array_destroy_null (&c->queries);
 
   /* update count of queries we are responsible for */
-  c->num_respon = (p4est_locidx_t) (resp.num_incoming + num_unowned);
+  c->num_respon = (p4est_locidx_t) (resp.num_incoming + num_outside);
 
-  /* update count of *unowned* queries we are responsible for */
-  c->num_unowned = (p4est_locidx_t) num_unowned;
+  /* update count of *outside* queries we are responsible for */
+  c->num_outside = (p4est_locidx_t) num_outside;
 
   /* allocate memory for incoming queries */
   c->queries = sc_array_new_count (query_size, num_incoming);
@@ -2536,15 +2536,15 @@ p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
 
   /* post non-blocking receives */
   post_receives (&resp, internal,
-                 c->queries->array + num_unowned * query_size, recv_req);
+                 c->queries->array + num_outside * query_size, recv_req);
   post_receives (&own, internal,
                  c->queries->array + resp.num_incoming * query_size,
                  recv_req + resp.senders->elem_count);
 
-  /* copy unowned queries from buffer */
-  if (internal->save_unowned) {
-    memcpy (c->queries->array, internal->unowned_queries->array,
-            num_unowned * query_size);
+  /* copy outside queries from buffer */
+  if (internal->save_outside) {
+    memcpy (c->queries->array, internal->outside_queries->array,
+            num_outside * query_size);
   }
 
   /* wait for messages to send */
@@ -2556,8 +2556,8 @@ p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
   SC_CHECK_MPI (mpiret);
 
   /* clean up communication metadata */
-  if (internal->unowned_queries != NULL) {
-    sc_array_destroy_null (&internal->unowned_queries);
+  if (internal->outside_queries != NULL) {
+    sc_array_destroy_null (&internal->outside_queries);
   }
   destroy_transfer_meta (&resp);
   destroy_transfer_meta (&own);

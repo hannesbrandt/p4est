@@ -629,9 +629,9 @@ typedef size_t      (*p4est_query_weight_t) (void *query, void *user);
  * \ref p4est_transfer_search. The second sub-array, consisting of the
  * remaining elements, contains the queries known to this process that it is
  * not responsible for propagating. In the case that \ref p4est_transfer_search
- * is run with the option \a save_unowned then the first sub-array may contain
- * unowned queries, so that these queries are not forgotten. In this case these
- * queries are the first \a num_unowned queries of the array.
+ * is run with the option \a save_outside then the first sub-array may contain
+ * outside queries, so that these queries are not forgotten. In this case these
+ * queries are the first \a num_outside queries of the array.
  *
  * This structure is intended to be initialised on each process, storing a
  * disjoint subset of the global set of queries. Initially, \a num_respon
@@ -679,12 +679,12 @@ typedef struct p4est_queries_context
    */
   p4est_locidx_t      num_respon;
 
-  /** The number of unowned queries that this process is responsible for
-   * propagating.  These queries are stored in the first \a num_unowned
+  /** The number of outside queries that this process is responsible for
+   * propagating.  These queries are stored in the first \a num_outside
    * positions of \a queries. This is only relevant if \ref
-   * p4est_transfer_search is called with the \a save_unowned option.
+   * p4est_transfer_search is called with the \a save_outside option.
    */
-  p4est_locidx_t      num_unowned;
+  p4est_locidx_t      num_outside;
 
   /* The following members are only relevant, if \ref p4est_transfer_search
    * was called with a maximum weight and a matching query_weight_fn. In this
@@ -768,7 +768,7 @@ p4est_queries_context_t *p4est_queries_context_new (sc_array_t *queries);
  * propagation of each query. This is the process with the lowest rank among
  * processes intersecting the query. Queries known to a process before
  * communication that do not intersect its domain are forgotten. The option
- * \a save_unowned can be used to avoid forgetting queries that do not
+ * \a save_outside can be used to avoid forgetting queries that do not
  * intersect the domain of any process. If this option is enabled then these
  * queries are remembered by the process that was responsible for propagating
  * them.
@@ -786,7 +786,7 @@ p4est_queries_context_t *p4est_queries_context_new (sc_array_t *queries);
  *                          so pointers to it should not be referenced after
  *                          this function has been called.
  * \param [in] intersect    Intersection callback.
- * \param [in] save_unowned If true then queries that would be unowned are
+ * \param [in] save_outside If true then queries outside of the \a p4est are
  *                          maintained by their propagating process
  * \return 0 if transfer was successful.
  */
@@ -795,7 +795,7 @@ int                 p4est_transfer_search (p4est_t *p4est,
                                            p4est_intersect_t intersect_fn,
                                            size_t max_weight,
                                            p4est_query_weight_t
-                                           query_weight_fn, int save_unowned);
+                                           query_weight_fn, int save_outside);
 
 /** The same as \ref p4est_transfer_search, except that we search with a
  * partition, rather than an explicit p4est. The partition can be that of any
@@ -814,7 +814,7 @@ int                 p4est_transfer_search (p4est_t *p4est,
  *                          so pointers to it should not be referenced after
  *                          this function has been called.
  * \param [in] intersect    Intersection callback.
- * \param [in] save_unowned If true then queries that would be unowned are
+ * \param [in] save_outside If true then queries outside of the partition are
  *                          maintained by their propagating process
  * \return                  0 if transfer was successful.
  */
@@ -828,7 +828,7 @@ int                 p4est_transfer_search_gfp (const p4est_quadrant_t *gfp,
                                                size_t max_weight,
                                                p4est_query_weight_t
                                                query_weight_fn,
-                                               int save_unowned);
+                                               int save_outside);
 
 SC_EXTERN_C_END;
 
