@@ -515,7 +515,6 @@
 #define p4est_transfer_end              p8est_transfer_end
 #define p4est_new_queries_context       p8est_new_queries_context
 #define p4est_transfer_search           p8est_transfer_search
-#define p4est_transfer_search_gfx       p8est_transfer_search_gfx
 #define p4est_transfer_search_gfp       p8est_transfer_search_gfp
 #define p4est_destroy_queries_context    p8est_destroy_queries_context
 
