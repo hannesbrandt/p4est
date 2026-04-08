@@ -599,117 +599,118 @@ void                p4est_transfer_end (p4est_transfer_context_t * tc);
  *                          Guaranteed to be non-empty.  If this is equal to
  *                          \b pfirst, then the recursion will stop for
  *                          \b quadrant's branch after this function returns.
- * \param[in] point         Pointer to a user-defined point object.
- * \return                  True, if \a point intersects \a quadrant.
+ * \param[in] query         Pointer to a user-defined query object.
+ * \return                  True, if \a query intersects \a quadrant.
  */
 typedef int         (*p4est_intersect_t) (p4est_t *p4est,
                                           p4est_topidx_t which_tree,
                                           p4est_quadrant_t *quadrant,
-                                          int pfirst, int plast, void *point);
+                                          int pfirst, int plast, void *query);
 
-/** Callback function to compute the weight of a point in
+/** Callback function to compute the weight of a query in
  * \ref p4est_transfer_search, as well as its variant
  * \ref p4est_transfer_search_gfp.
  *
- * \param[in] point         The point for which the weight needs to be computed.
+ * \param[in] query         The query for which the weight needs to be computed.
  * \param[in] user          Pointer to user-provided context data.
- * \return                  The integer weight of the point.
+ * \return                  The integer weight of the query.
  */
-typedef size_t      (*p4est_point_weight_t) (void *point, void *user);
+typedef size_t      (*p4est_query_weight_t) (void *query, void *user);
 
 /** This structure is used with \ref p4est_transfer_search to maintain a
- * distributed collection of points, so that the points known to a process
- * are exactly the points which intersect its domain. Points are completely
+ * distributed collection of queries, so that the queries known to a process
+ * are exactly the queries which intersect its domain. Queries are completely
  * arbitrary and may for example represent geometric objects such as polyhedra
  * or geodesics.
  *
- * The \a points array is subdivided into two sub-arrays. The first sub-array,
+ * The \a queries array is subdivided into two sub-arrays. The first sub-array,
  * consisting of the first \a num_respon consecutive elements, contains the
- * points that this process is responsible for propagating during
+ * queries that this process is responsible for propagating during
  * \ref p4est_transfer_search. The second sub-array, consisting of the
- * remaining elements, contains the points known to this process that it is
+ * remaining elements, contains the queries known to this process that it is
  * not responsible for propagating. In the case that \ref p4est_transfer_search
  * is run with the option \a save_unowned then the first sub-array may contain
- * unowned points, so that these points are not forgotten. In this case these
- * points are the first \a num_unowned points of the array.
+ * unowned queries, so that these queries are not forgotten. In this case these
+ * queries are the first \a num_unowned queries of the array.
  *
  * This structure is intended to be initialised on each process, storing a
- * disjoint subset of the global set of points. Initially, \a num_respon
- * should be set to the length of \a points so that each each process is
- * responsible for propagating all of the points it knows. Users initializing
+ * disjoint subset of the global set of queries. Initially, \a num_respon
+ * should be set to the length of \a queries so that each each process is
+ * responsible for propagating all of the queries it knows. Users initializing
  * in other ways should be aware that if no process is responsible for
- * propagating a point then the point will be forgotten after calling
+ * propagating a query then the query will be forgotten after calling
  * \ref p4est_transfer_search, and similarly that if multiple processes are
- * responsible for propagating a point then it will be duplicated.
+ * responsible for propagating a query then it will be duplicated.
  *
- * Calling \ref p4est_transfer_search performs the transfer of points and
- * updates \a num_respon, while preserving the property that each point has
+ * Calling \ref p4est_transfer_search performs the transfer of queries and
+ * updates \a num_respon, while preserving the property that each query has
  * exactly one process responsible for propagating it.
  *
- * Users may modify the points array between calls to
- * \ref p4est_transfer_search. For example, point coordinates could
- * be modified to represent movement of points as a simulation evolves through
- * time. Care should be taken when adding or deleting points, and when
- * modifying the order of \a points, to ensure that \a num_respon is updated
- * and that the first \a num_respon points are still the points that the
+ * Users may modify the queries array between calls to
+ * \ref p4est_transfer_search. For example, query coordinates could
+ * be modified to represent movement of queries as a simulation evolves through
+ * time. Care should be taken when adding or deleting queries, and when
+ * modifying the order of \a queries, to ensure that \a num_respon is updated
+ * and that the first \a num_respon queries are still the queries that the
  * process should propagate.
  *
- * During the transfer of points in \ref p4est_transfer_search the \a points
+ * During the transfer of queries in \ref p4est_transfer_search the \a queries
  * array is destroyed and reallocated. Thus users should not maintain pointers
  * to it or its contents.
  */
-typedef struct p4est_points_context
+typedef struct p4est_queries_context
 {
-  /** All points known to this process.
-   * Each point is entirely user-defined, we just pass it around.  Most
+  /** All queries known to this process.
+   * Each query is entirely user-defined, we just pass it around.  Most
    * often it is a structured type that is otherwise state-free.  It may
    * even be a global index into some replicated data, but of course, the
-   * whole point (pun not intended) of this function is to avoid replicating
-   * data globally and to maintain the points fully distributed in parallel.
+   * whole point of this function is to avoid replicating data globally and to
+   * maintain the queries fully distributed in parallel.
    */
-  sc_array_t         *points;
+  sc_array_t         *queries;
 
-  /** Number of points known to process, in other words length of \c points. */
+  /** Number of queries known to process, in other words length of \a queries.
+   */
   p4est_locidx_t      num_known;
 
-  /** The number of points this process is responsible for propagating when
-   * \ref p4est_transfer_search is called.  These points are stored in the
-   * first \a num_respon positions of \c points.
+  /** The number of queries this process is responsible for propagating when
+   * \ref p4est_transfer_search is called.  These queries are stored in the
+   * first \a num_respon positions of \a queries.
    */
   p4est_locidx_t      num_respon;
 
-  /** The number of unowned points that this process is responsible for
-   * propagating.  These points are stored in the first \a num_unowned
-   * positions of \c points. This is only relevant if \ref
+  /** The number of unowned queries that this process is responsible for
+   * propagating.  These queries are stored in the first \a num_unowned
+   * positions of \a queries. This is only relevant if \ref
    * p4est_transfer_search is called with the \a save_unowned option.
    */
   p4est_locidx_t      num_unowned;
 
   /* The following members are only relevant, if \ref p4est_transfer_search
-   * was called with a maximum weight and a matching point_weight_fn. In this
-   * case they contain information about all points that could not be sent to
+   * was called with a maximum weight and a matching query_weight_fn. In this
+   * case they contain information about all queries that could not be sent to
    * their destination because it would lead to the target process exceeding its
    * maximum weight. */
   /** The ratio by which the available local space, determined by subtracting
    * the input of previously local triangles from the maximum weight, would
    * be exceeded by the incoming triangle messages. A value of 1 or lower
    * indicates that all triangles fit locally and thus were also correctly
-   * transmitted and stored in \a points. */
-  double ratio;
+   * transmitted and stored in \a queries. */
+  double              ratio;
 
   /** An array only created if \a ratio is above 1. In this case it contains all
-   * ranks which own points which should be in the responsibility of this
+   * ranks which own queries which should be in the responsibility of this
    * process, but could not be sent. */
   sc_array_t         *resp_senders;
 
   /** An array only created if \a ratio is above 1. In this case it contains all
-   * ranks which own point which would be local to this process, but not in its
+   * ranks which own query which would be local to this process, but not in its
    * responsibility. */
   sc_array_t         *own_senders;
 
   /** An array containing send buffers in form of sc_array_t's. Each entry
    * corresponds to a message that could not be sent to its destination and
-   * contains the points the target rank would have been responsible for. */
+   * contains the queries the target rank would have been responsible for. */
   sc_array_t         *resp_buffers;
 
   /** An array containing the target rank of the corresponding entry of
@@ -722,7 +723,8 @@ typedef struct p4est_points_context
 
   /** An array containing send buffers in form of sc_array_t's. Each entry
    * corresponds to a message that could not be sent to its destination and
-   * contains points local to the target ranks, but not in its responsibility. */
+   * contains queries local to the target ranks, but not in its responsibility.
+   */
   sc_array_t         *own_buffers;
 
   /** An array containing the target rank of the corresponding entry of
@@ -733,67 +735,67 @@ typedef struct p4est_points_context
    * \a own_receivers exceeds its local max_weight. */
   sc_array_t         *own_ratios;
 }
-p4est_points_context_t;
+p4est_queries_context_t;
 
-/** Initialize a p4est_points_context_t for a subsequent transfer search.
- * The points array is stored in the context, which takes ownership of the
- * array. It is assumed that all passed points are the responsiblity of the
- * calling process, as all other points would be deleted on entry of the next
+/** Initialize a p4est_queries_context_t for a subsequent transfer search.
+ * The queries array is stored in the context, which takes ownership of the
+ * array. It is assumed that all passed queries are the responsiblity of the
+ * calling process, as all other queries would be deleted on entry of the next
  * call of \ref p4est_transfer_search anyways.
  */
-p4est_points_context_t *p4est_new_points_context (sc_array_t *points);
+p4est_queries_context_t *p4est_new_queries_context (sc_array_t *queries);
 
 /** Collective, point-to-point transfer for maintaining distributed
- * collection of points. After communication, points are stored (only) on the
+ * collection of queries. After communication, queries are stored (only) on the
  * processes whose domains they intersect. A return value of 0 indicates
  * success. An nonzero value is returned to indicate error. Errors occurs when
  * the number of bytes transferred in any single message would exceed
  * INT_MAX (2GB on most machines), or if any process would receive more than
- * P4EST_LOCIDX_MAX points in total. Error/success is collective. If an error
+ * P4EST_LOCIDX_MAX queries in total. Error/success is collective. If an error
  * does occur then the contents of \a c are not modified.
  *
- * Points can be instances of an arbitrary struct. Point-quadrant intersection
- * is specified by the user supplied callback \a intersect. A single point may
+ * Queries can be instances of an arbitrary struct. Query-quadrant intersection
+ * is specified by the user supplied callback \a intersect. A single query may
  * intersect multiple process domains, and after communication will be known
  * to each of these processes.
  *
- * Each process is responsible for propagating a subset of the points it
+ * Each process is responsible for propagating a subset of the queries it
  * knows. Before communication, exactly one process should be responsible for
- * propagating each point. The intersecting processes for each point are
+ * propagating each query. The intersecting processes for each query are
  * determined - by the responsible process - with \ref p4est_search_partition.
- * Points are then communicated to the relevant processes. The algorithm
+ * Queries are then communicated to the relevant processes. The algorithm
  * ensures that after communication exactly one process is responsible for the
- * propagation of each point. This is the process with the lowest rank among
- * processes intersecting the point. Points known to a process before
+ * propagation of each query. This is the process with the lowest rank among
+ * processes intersecting the query. Queries known to a process before
  * communication that do not intersect its domain are forgotten. The option
- * \a save_unowned can be used to avoid forgetting points that do not
+ * \a save_unowned can be used to avoid forgetting queries that do not
  * intersect the domain of any process. If this option is enabled then these
- * points are remembered by the process that was responsible for propagating
+ * queries are remembered by the process that was responsible for propagating
  * them.
  *
- * The points that a process is responsible for propagating are stored in a
- * subarray of the array of known points, as described in
- * \ref p4est_points_context. Users should take care to maintain this
- * subdivision if they modify the array of points between rounds of
+ * The queries that a process is responsible for propagating are stored in a
+ * subarray of the array of known queries, as described in
+ * \ref p4est_queries_context. Users should take care to maintain this
+ * subdivision if they modify the array of queries between rounds of
  * communication.
  *
  * \param [in] p4est        The forest we search with. Its user_pointer is
  *                          passed to the intersection callback.
- * \param [in,out] c        Points and propagation responsibilities. The
- *                          array \a c.points is destroyed and reallocated,
+ * \param [in,out] c        Queries and propagation responsibilities. The
+ *                          array \a c.queries is destroyed and reallocated,
  *                          so pointers to it should not be referenced after
  *                          this function has been called.
  * \param [in] intersect    Intersection callback.
- * \param [in] save_unowned If true then points that would be unowned are
+ * \param [in] save_unowned If true then queries that would be unowned are
  *                          maintained by their propagating process
  * \return 0 if transfer was successful.
  */
 int                 p4est_transfer_search (p4est_t *p4est,
-                                           p4est_points_context_t *c,
+                                           p4est_queries_context_t *c,
                                            p4est_intersect_t intersect_fn,
                                            size_t max_weight,
-                                           p4est_point_weight_t
-                                           point_weight_fn, int save_unowned);
+                                           p4est_query_weight_t
+                                           query_weight_fn, int save_unowned);
 
 /** The same as \ref p4est_transfer_search, except that we search with a
  * partition, rather than an explicit p4est. The partition can be that of any
@@ -804,15 +806,15 @@ int                 p4est_transfer_search (p4est_t *p4est,
  * \param [in] gfp          Partition position to traverse.  Length \a nmemb + 1.
  * \param [in] nmemb        Number of processors encoded in \a gfp (plus one).
  * \param [in] num_trees    Tree number must match the contents of \a gfp.
- * \param [in] user_pointer Passed to the intersection and the point weight
+ * \param [in] user_pointer Passed to the intersection and the query weight
  *                          callback.
  * \param [in] mpicomm      Function is collective over the communicator.
- * \param [in,out] c        Points and propagation responsibilities. The
- *                          array \a c.points is destroyed and reallocated,
+ * \param [in,out] c        Queries and propagation responsibilities. The
+ *                          array \a c.queries is destroyed and reallocated,
  *                          so pointers to it should not be referenced after
  *                          this function has been called.
  * \param [in] intersect    Intersection callback.
- * \param [in] save_unowned If true then points that would be unowned are
+ * \param [in] save_unowned If true then queries that would be unowned are
  *                          maintained by their propagating process
  * \return                  0 if transfer was successful.
  */
@@ -821,16 +823,16 @@ int                 p4est_transfer_search_gfp (const p4est_quadrant_t *gfp,
                                                p4est_topidx_t num_trees,
                                                void *user_pointer,
                                                sc_MPI_Comm mpicomm,
-                                               p4est_points_context_t *c,
+                                               p4est_queries_context_t *c,
                                                p4est_intersect_t intersect_fn,
                                                size_t max_weight,
-                                               p4est_point_weight_t
-                                               point_weight_fn,
+                                               p4est_query_weight_t
+                                               query_weight_fn,
                                                int save_unowned);
 
 SC_EXTERN_C_END;
 
-/** Destroy a p4est_points_context_t and free all point arrays it contains. */
-void                p4est_destroy_points_context (p4est_points_context_t *c);
+/** Destroy a p4est_queries_context_t and free all query arrays it contains. */
+void                p4est_destroy_queries_context (p4est_queries_context_t *c);
 
 #endif /* !P4EST_COMMUNICATION_H */

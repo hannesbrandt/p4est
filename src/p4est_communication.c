@@ -1491,19 +1491,19 @@ typedef struct p4est_transfer_meta
 {
   /* in the following p refers to the local rank, and q any rank */
   /* data used for sending */
-  /* number of points that p receives in this iteration */
+  /* number of queries that p receives in this iteration */
   size_t              num_incoming;
-  /* weight of points that p receives in this iteration */
+  /* weight of queries that p receives in this iteration */
   size_t              weight_incoming;
-  /* weight of points that p receives from p in this iteration */
+  /* weight of queries that p receives from p in this iteration */
   size_t              weight_already_local;
-  /* size of all points sent and received */
-  size_t              point_size;
-  /* q -> {points that p is sending to q} */
+  /* size of all queries sent and received */
+  size_t              query_size;
+  /* q -> {queries that p is sending to q} */
   sc_array_t         *send_buffers;
-  /* ranks receiving points from p */
+  /* ranks receiving queries from p */
   sc_array_t         *receivers;
-  /* number and weight of points each receiver gets from p */
+  /* number and weight of queries each receiver gets from p */
   sc_array_t         *recvs_info;
   /* ratios by which receivers target weight is exceeded */
   sc_array_t         *recvs_ratios;
@@ -1512,15 +1512,15 @@ typedef struct p4est_transfer_meta
   /* flag indiciating if at least one entry of \a recvs_ratios exceeds 1. */
   int                 have_unsent;
 
-  /* the mpicomm used for exchanging points */
+  /* the mpicomm used for exchanging queries */
   sc_MPI_Comm         mpicomm;
   /* the local rank in mpicomm */
   int                 mpirank;
 
   /* data used for receiving */
-  /* ranks sending points to p */
+  /* ranks sending queries to p */
   sc_array_t         *senders;
-  /* number and weight of points p gets from each sender */
+  /* number and weight of queries p gets from each sender */
   sc_array_t         *sends_info;
   /* the ratio by which the local max_weight would be exceeded */
   double              ratio;
@@ -1530,14 +1530,14 @@ typedef struct p4est_transfer_meta
 
 /** Safely NULL-init transfer search metadata */
 static void
-init_transfer_meta (p4est_transfer_meta_t *meta, size_t point_size,
+init_transfer_meta (p4est_transfer_meta_t *meta, size_t query_size,
                     sc_MPI_Comm mpicomm)
 {
   int                 mpiret;
 
   /* initialize the whole structure including compiler padding */
   memset (meta, 0, sizeof (*meta));
-  meta->point_size = point_size;
+  meta->query_size = query_size;
   meta->mpicomm = mpicomm;
   mpiret = sc_MPI_Comm_rank (mpicomm, &meta->mpirank);
   SC_CHECK_MPI (mpiret);
@@ -1560,14 +1560,14 @@ destroy_transfer_meta (p4est_transfer_meta_t *meta)
     sc_array_destroy_null (&meta->recvs_info);
   }
   if (meta->send_buffers != NULL) {
-    /* reset all messages that are not currently part of the point_context_t */
+    /* reset all messages that are not currently part of the queries_context_t */
     P4EST_ASSERT (meta->recvs_ratios != NULL
                   && meta->recvs_ratios->elem_count ==
                   meta->send_buffers->elem_count);
     for (ibz = 0; ibz < meta->send_buffers->elem_count; ibz++) {
       if (*(double *) sc_array_index (meta->recvs_ratios, ibz) <= 1. ||
           *(int *) sc_array_index (meta->receivers, ibz) == meta->mpirank) {
-        /* the point_context_t took ownership of all unsent arrays, so we can
+        /* the queries_context_t took ownership of all unsent arrays, so we can
          * not reset them here */
         sc_array_reset ((sc_array_t *)
                         sc_array_index (meta->send_buffers, ibz));
@@ -1594,23 +1594,23 @@ destroy_transfer_meta (p4est_transfer_meta_t *meta)
 
 /** Internal context for \ref p4est_transfer_search.
  *
- * Allows us to access the following variables in the point callback during
+ * Allows us to access the following variables in the query callback during
  * \ref p4est_search_partition.
  */
 typedef struct p4est_transfer_internal
 {
-  /* point-quadrant intersection function */
+  /* query-quadrant intersection function */
   p4est_intersect_t   intersect_fn;
   /* offsets of the different buffers in the partition search indexing */
-  sc_array_t         *point_references;
-  /* stores the last process we detected as intersecting each point */
+  sc_array_t         *query_references;
+  /* stores the last process we detected as intersecting each query */
   int                *last_procs;
   /* communication metadata */
   p4est_transfer_meta_t *resp, *own;
-  /* unowned points buffer */
-  sc_array_t         *unowned_points;
+  /* unowned queries buffer */
+  sc_array_t         *unowned_queries;
   /* the data to search with and then transfer */
-  p4est_points_context_t *c;
+  p4est_queries_context_t *c;
   /* user context passed in a p4est to intersect */
   void               *user_pointer;
 
@@ -1621,7 +1621,7 @@ typedef struct p4est_transfer_internal
   int                 compute_weights;  /* flag indicating, if the user passed
                                            a valid weight computation setup */
   size_t              max_weight;       /* the maximum allowed weight per process */
-  p4est_point_weight_t point_weight_fn; /* callback to compute point weights */
+  p4est_query_weight_t query_weight_fn; /* callback to compute query weights */
 
   /* data needed if we do not have a full p4est */
   /* global first position array */
@@ -1633,7 +1633,7 @@ typedef struct p4est_transfer_internal
   /* MPI communicator */
   sc_MPI_Comm         mpicomm;
 
-  /* config option to save points not owned by any process */
+  /* config option to save queries not owned by any process */
   int                 save_unowned;
 }
 p4est_transfer_internal_t;
@@ -1641,17 +1641,17 @@ p4est_transfer_internal_t;
 #ifdef P4EST_ENABLE_DEBUG
 
 static int
-p4est_points_context_is_valid (p4est_points_context_t *c)
+p4est_queries_context_is_valid (p4est_queries_context_t *c)
 {
   size_t              count;
 
   P4EST_ASSERT (c != NULL);
 
-  /* the points array must be allocated */
-  if (c->points == NULL) {
+  /* the queries array must be allocated */
+  if (c->queries == NULL) {
     return 0;
   }
-  count = c->points->elem_count;
+  count = c->queries->elem_count;
 
   /* the range entries must be consistent */
   if (!(0 <= c->num_unowned && c->num_unowned <= c->num_respon)) {
@@ -1667,15 +1667,15 @@ p4est_points_context_is_valid (p4est_points_context_t *c)
 
 #endif
 
-p4est_points_context_t *
-p4est_new_points_context (sc_array_t * points)
+p4est_queries_context_t *
+p4est_new_queries_context (sc_array_t * queries)
 {
-  p4est_points_context_t *c = P4EST_ALLOC (p4est_points_context_t, 1);
+  p4est_queries_context_t *c = P4EST_ALLOC (p4est_queries_context_t, 1);
 
-  /* take responsibility for complete points array */
-  c->points = points;
-  c->num_known = points->elem_count;
-  c->num_respon = points->elem_count;
+  /* take responsibility for complete queries array */
+  c->queries = queries;
+  c->num_known = queries->elem_count;
+  c->num_respon = queries->elem_count;
   c->num_unowned = 0;
 
   /* the following arrays are only used when a maximum weight was enforced and
@@ -1688,28 +1688,29 @@ p4est_new_points_context (sc_array_t * points)
 }
 
 static size_t
-compute_local_point_weights (p4est_transfer_internal_t *internal)
+compute_local_query_weights (p4est_transfer_internal_t *internal)
 {
-  size_t              ip, ib, ibp;
+  size_t              iq, ib, ibq;
   size_t              weight_local;
   sc_array_t         *buffer;
 
-  /* the points to compute the weight of */
-  p4est_points_context_t *c = internal->c;
+  /* the queries to compute the weight of */
+  p4est_queries_context_t *c = internal->c;
 
-  /* loop over all responsible points and add their weights */
+  /* loop over all responsible queries and add their weights */
   weight_local = 0;
-  P4EST_ASSERT ((size_t) c->num_respon <= c->points->elem_count);
-  for (ip = 0; ip < (size_t) c->num_respon; ip++) {
-    weight_local += internal->point_weight_fn (sc_array_index (c->points, ip),
-                                               internal->user_pointer);
+  P4EST_ASSERT ((size_t) c->num_respon <= c->queries->elem_count);
+  for (iq = 0; iq < (size_t) c->num_respon; iq++) {
+    weight_local +=
+      internal->query_weight_fn (sc_array_index (c->queries, iq),
+                                 internal->user_pointer);
   }
   if (c->resp_buffers != NULL) {
     for (ib = 0; ib < c->resp_buffers->elem_count; ib++) {
       buffer = (sc_array_t *) sc_array_index (c->resp_buffers, ib);
-      for (ibp = 0; ibp < buffer->elem_count; ibp++) {
+      for (ibq = 0; ibq < buffer->elem_count; ibq++) {
         weight_local +=
-          internal->point_weight_fn (sc_array_index (buffer, ibp),
+          internal->query_weight_fn (sc_array_index (buffer, ibq),
                                      internal->user_pointer);
       }
     }
@@ -1718,11 +1719,11 @@ compute_local_point_weights (p4est_transfer_internal_t *internal)
   return weight_local;
 }
 
-/** Push point \a pi into the send buffer for \a receiver */
+/** Push query \a qi into the send buffer for \a receiver */
 static void
 push_to_send_buffer (p4est_transfer_meta_t *meta,
                      p4est_transfer_internal_t *internal,
-                     p4est_locidx_t pi, int receiver)
+                     p4est_locidx_t qi, int receiver)
 {
   size_t              bcount;
   sc_array_t         *b;
@@ -1743,7 +1744,7 @@ push_to_send_buffer (p4est_transfer_meta_t *meta,
   if (bcount > 0 && rank < receiver) {
     /* evaluate the current send buffer, before pushing the next one */
     if (b->elem_count * b->elem_size > (size_t) INT_MAX) {
-      P4EST_LERRORF ("Message of %lld points for rank %d is too large.\n",
+      P4EST_LERRORF ("Message of %lld queries for rank %d is too large.\n",
                      (long long) b->elem_count, rank);
       meta->errsend = 1;
     }
@@ -1751,7 +1752,7 @@ push_to_send_buffer (p4est_transfer_meta_t *meta,
   if (bcount == 0 || rank < receiver) {
     /* push a new send buffer */
     b = (sc_array_t *) sc_array_push (meta->send_buffers);
-    sc_array_init (b, meta->point_size);
+    sc_array_init (b, meta->query_size);
     bcount++;
 
     /* store the rank of the receiver */
@@ -1763,22 +1764,22 @@ push_to_send_buffer (p4est_transfer_meta_t *meta,
     info->weight = 0;
   }
 
-  /* add point to send buffer */
+  /* add query to send buffer */
   memcpy (sc_array_push (b),
-          *(void **) sc_array_index (internal->point_references, pi),
-          meta->point_size);
+          *(void **) sc_array_index (internal->query_references, qi),
+          meta->query_size);
   info->count++;
   if (internal->compute_weights) {
-    /* add the points' weight to the total weight for the receiver */
-    info->weight += internal->point_weight_fn (*(void **)
+    /* add the queries' weight to the total weight for the receiver */
+    info->weight += internal->query_weight_fn (*(void **)
                                                sc_array_index (internal->
-                                                               point_references,
-                                                               pi),
+                                                               query_references,
+                                                               qi),
                                                internal->user_pointer);
   }
 }
 
-/** Point callback for \ref p4est_search_partition in compute_send_buffers
+/** Query callback for \ref p4est_search_partition in compute_send_buffers
  *
  * \param[in,out] p4est   We only use the user pointer which points to our
  *                        internal context. This may be a fake p4est.
@@ -1786,15 +1787,15 @@ push_to_send_buffer (p4est_transfer_meta_t *meta,
  * \param[in] quadrant    The quadrant
  * \param[in] pfirst      The first rank owning the quadrant
  * \param[in] plast       The last rank owning the quadrant
- * \param[in] point_index Points to the search object representing the point.
- *                        The search object is the index of the point, not
- *                        the point itself.
- * \return 1 if point should follow recursion.
+ * \param[in] query_index Points to the search object representing the query.
+ *                        The search object is the index of the query, not
+ *                        the query itself.
+ * \return 1 if query should follow recursion.
  */
 static int
-transfer_search_point (p4est_t *p4est, p4est_topidx_t which_tree,
+transfer_search_query (p4est_t *p4est, p4est_topidx_t which_tree,
                        p4est_quadrant_t *quadrant, int pfirst, int plast,
-                       void *point_index)
+                       void *query_index)
 {
   int                 intersection_found;
 
@@ -1806,11 +1807,11 @@ transfer_search_point (p4est_t *p4est, p4est_topidx_t which_tree,
   p4est_transfer_meta_t *resp = internal->resp;
   p4est_transfer_meta_t *own = internal->own;
 
-  /* last process which we recorded this point as being sent to */
+  /* last process which we recorded this query as being sent to */
   int                 last_proc;
 
-  /* point index and points array */
-  size_t              pi = *(size_t *) point_index;
+  /* query index and queries array */
+  size_t              qi = *(size_t *) query_index;
 
   /* sanity checks */
   P4EST_ASSERT (internal != NULL);
@@ -1819,19 +1820,19 @@ transfer_search_point (p4est_t *p4est, p4est_topidx_t which_tree,
   /* temporarily replace our internal context with the user supplied one */
   p4est->user_pointer = internal->user_pointer;
 
-  /* check if point intersects the quadrant */
+  /* check if query intersects the quadrant */
   intersection_found = internal->intersect_fn (p4est, which_tree, quadrant,
                                                pfirst, plast, *(void **)
                                                sc_array_index
-                                               (internal->point_references,
-                                                pi));
+                                               (internal->query_references,
+                                                qi));
 
   /* restore our internal context */
   p4est->user_pointer = internal;
 
   /* if current quadrant has multiple owners */
   if (pfirst < plast) {
-    /* point follows recursion when it intersects the quadrant */
+    /* query follows recursion when it intersects the quadrant */
     return intersection_found;
   }
 
@@ -1839,16 +1840,16 @@ transfer_search_point (p4est_t *p4est, p4est_topidx_t which_tree,
   P4EST_ASSERT (pfirst == plast);
 
   if (!intersection_found) {
-    /* point does not intersect this quadrant */
+    /* query does not intersect this quadrant */
     return 0;
   }
 
   /* get last process whose domain we have already recorded as intersecting
-   * this point
+   * this query
    */
-  last_proc = internal->last_procs[pi];
+  last_proc = internal->last_procs[qi];
 
-  /* since we traverse in order we expect not to have seen this point in
+  /* since we traverse in order we expect not to have seen this query in
    * in higher process domains yet
    */
   P4EST_ASSERT (last_proc <= pfirst);
@@ -1857,27 +1858,27 @@ transfer_search_point (p4est_t *p4est, p4est_topidx_t which_tree,
     /* we have found an already recorded process */
     return 0;
   }
-  /* otherwise we have found a new process intersecting the point */
+  /* otherwise we have found a new process intersecting the query */
 
   /* record this new process */
-  internal->last_procs[pi] = pfirst;
+  internal->last_procs[qi] = pfirst;
 
-  /* add point to corresponding send buffer */
+  /* add query to corresponding send buffer */
   if (last_proc == -1) {
-    /* first process intersecting point should own it and be responsible for
+    /* first process intersecting query should own it and be responsible for
        its propagation */
-    push_to_send_buffer (resp, internal, pi, pfirst);
+    push_to_send_buffer (resp, internal, qi, pfirst);
   }
   else {
-    /* process should own point but not be responsible for its propagation */
-    push_to_send_buffer (own, internal, pi, pfirst);
+    /* process should own query but not be responsible for its propagation */
+    push_to_send_buffer (own, internal, qi, pfirst);
   }
 
   /* end recursion */
   return 0;
 }
 
-/** Prepare outgoing buffers of points to propagate.
+/** Prepare outgoing buffers of queries to propagate.
  *
  * \param[in, out] p4est_transfer_internal Internal context
  * \param[in] num_procs number of MPI processes
@@ -1886,83 +1887,83 @@ static void
 compute_send_buffers (p4est_transfer_internal_t *internal)
 {
   sc_array_t         *search_objects, *buffer;
-  size_t              ip, ibp, ib;
-  p4est_locidx_t      num_points;
-  p4est_points_context_t *c = internal->c;
+  size_t              iq, ibq, ib;
+  p4est_locidx_t      num_queries;
+  p4est_queries_context_t *c = internal->c;
 
-  /* compute total number of points entering the search either from the point
+  /* compute total number of queries entering the search either from the query
    * struct or the remaining send buffers from previous iterations */
-  num_points = c->num_respon;
+  num_queries = c->num_respon;
   if (c->resp_buffers != NULL) {
-    /* do not search own_buffers again, as they contain replicated points */
+    /* do not search own_buffers again, as they contain replicated queries */
     for (ib = 0; ib < c->resp_buffers->elem_count; ib++) {
       buffer = (sc_array_t *) sc_array_index (c->resp_buffers, ib);
-      num_points += (p4est_locidx_t) buffer->elem_count;
+      num_queries += (p4est_locidx_t) buffer->elem_count;
     }
   }
 
-  /* Initialize last_procs to -1 to signify no points have been added to send
+  /* Initialize last_procs to -1 to signify no queries have been added to send
      buffers. */
   /* Here we are relying on the fact that the char -1 is 11111111 in bits,
      and so the resulting int array will be filled with -1. */
-  internal->last_procs = P4EST_ALLOC (int, num_points);
-  memset (internal->last_procs, -1, num_points * sizeof (int));
+  internal->last_procs = P4EST_ALLOC (int, num_queries);
+  memset (internal->last_procs, -1, num_queries * sizeof (int));
 
   /* set up search indices for partition search */
-  search_objects = sc_array_new_count (sizeof (size_t), num_points);
-  for (ip = 0; ip < (size_t) num_points; ++ip) {
-    *(size_t *) sc_array_index (search_objects, ip) = ip;
+  search_objects = sc_array_new_count (sizeof (size_t), num_queries);
+  for (iq = 0; iq < (size_t) num_queries; ++iq) {
+    *(size_t *) sc_array_index (search_objects, iq) = iq;
   }
 
   /* set up addresses of search objects */
-  internal->point_references =
-    sc_array_new_count (sizeof (void *), num_points);
-  for (ip = 0; ip < (size_t) c->num_respon; ip++) {
-    *(void **) sc_array_index (internal->point_references, ip) =
-      sc_array_index (c->points, ip);
+  internal->query_references =
+    sc_array_new_count (sizeof (void *), num_queries);
+  for (iq = 0; iq < (size_t) c->num_respon; iq++) {
+    *(void **) sc_array_index (internal->query_references, iq) =
+      sc_array_index (c->queries, iq);
   }
   if (c->resp_buffers != NULL) {
     for (ib = 0; ib < c->resp_buffers->elem_count; ib++) {
       buffer = (sc_array_t *) sc_array_index (c->resp_buffers, ib);
-      for (ibp = 0; ibp < buffer->elem_count; ibp++, ip++) {
-        *(void **) sc_array_index (internal->point_references, ip) =
-          sc_array_index (buffer, ibp);
+      for (ibq = 0; ibq < buffer->elem_count; ibq++, iq++) {
+        *(void **) sc_array_index (internal->query_references, iq) =
+          sc_array_index (buffer, ibq);
       }
     }
   }
 
-  /* add points to the relevant send buffers (by partition search) */
+  /* add queries to the relevant send buffers (by partition search) */
   if (internal->p4est != NULL) {
     /* We are running p4est_transfer_search */
-    /* Run search to add points to buffers */
-    p4est_search_partition (internal->p4est, 0, NULL, transfer_search_point,
+    /* Run search to add queries to buffers */
+    p4est_search_partition (internal->p4est, 0, NULL, transfer_search_query,
                             search_objects);
   }
   else {
     /* We are running p4est_transfer_search_gfp */
     P4EST_ASSERT (internal->gfp != NULL);
 
-    /* Run search to add points to buffers */
+    /* Run search to add queries to buffers */
     p4est_search_partition_gfp (internal->gfp, internal->nmemb,
                                 internal->num_trees, 0, internal, NULL,
-                                transfer_search_point, search_objects);
+                                transfer_search_query, search_objects);
   }
 
-  /* save points that do not intersect any process domain, if configured to */
+  /* save queries that do not intersect any process domain, if configured to */
   if (internal->save_unowned) {
-    for (ip = 0; ip < (size_t) num_points; ++ip) {
-      if (internal->last_procs[ip] == -1) {
-        /* add point to unowned points buffer */
-        memcpy (sc_array_push (internal->unowned_points),
-                *(void **) sc_array_index (internal->point_references, ip),
-                c->points->elem_size);
+    for (iq = 0; iq < (size_t) num_queries; ++iq) {
+      if (internal->last_procs[iq] == -1) {
+        /* add query to unowned queries buffer */
+        memcpy (sc_array_push (internal->unowned_queries),
+                *(void **) sc_array_index (internal->query_references, iq),
+                c->queries->elem_size);
       }
     }
   }
 
   /* clean up */
   sc_array_destroy_null (&search_objects);
-  sc_array_destroy_null (&internal->point_references);
+  sc_array_destroy_null (&internal->query_references);
   P4EST_FREE (internal->last_procs);
 }
 
@@ -1976,7 +1977,7 @@ exchange_ratios (p4est_transfer_meta_t *meta)
   sc_MPI_Request     *send_reqs, *recv_reqs;
 
   /* allocate a send buffer and send the ratio to all processes this process
-   * will receive points from */
+   * will receive queries from */
   num_senders = meta->senders->elem_count;
   replicated_ratios = sc_array_new_count (sizeof (double), num_senders);
   send_reqs = P4EST_ALLOC (sc_MPI_Request, num_senders);
@@ -2019,9 +2020,9 @@ exchange_ratios (p4est_transfer_meta_t *meta)
   sc_array_destroy (replicated_ratios);
 }
 
-/** Post non-blocking sends for points in the given communication data.
+/** Post non-blocking sends for queries in the given communication data.
  *
- * To each rank q in meta->receivers we send the points stored at
+ * To each rank q in meta->receivers we send the queries stored at
  * meta->send_buffers[q]
  *
  * \param[in]   meta        communication data
@@ -2049,7 +2050,7 @@ post_sends (p4est_transfer_meta_t *meta,
       /* we do not send a message, if the target processes' max_weight would be
        * exceeded */
       req[i] = sc_MPI_REQUEST_NULL;
-      /* push point buffer, target rank and ratio to the respective arrays */
+      /* push query buffer, target rank and ratio to the respective arrays */
       memcpy (sc_array_push (buffers),
               sc_array_index_int (meta->send_buffers, i),
               sizeof (sc_array_t));
@@ -2059,17 +2060,17 @@ post_sends (p4est_transfer_meta_t *meta,
               sc_array_index_int (meta->recvs_ratios, i), sizeof (double));
     }
     else {
-      /* post non-blocking send of points to q */
+      /* post non-blocking send of queries to q */
       b = (sc_array_t *) sc_array_index_int (meta->send_buffers, i);
-      mpiret = sc_MPI_Isend (b->array, b->elem_count * meta->point_size,
+      mpiret = sc_MPI_Isend (b->array, b->elem_count * meta->query_size,
                              sc_MPI_BYTE, q, 0, meta->mpicomm, req + i);
       SC_CHECK_MPI (mpiret);
     }
   }
 }
 
-/** Update communication metadata with total number of incoming points, and
- *  offsets to receive incoming points at.
+/** Update communication metadata with total number of incoming queries, and
+ *  offsets to receive incoming queries at.
  *
  *  The outputs are stored in the fields meta->num_incoming and meta->offsets.
  *  We assume that meta->senders and meta->sends_info are already
@@ -2090,12 +2091,12 @@ compute_offsets_and_num_incoming (p4est_transfer_meta_t *meta)
 
   /* compute offsets */
   for (int i = 0; i < (int) meta->senders->elem_count; i++) {
-    meta->offsets[i] = meta->num_incoming * meta->point_size;
+    meta->offsets[i] = meta->num_incoming * meta->query_size;
     info = (p4est_transfer_info_t *) sc_array_index_int (meta->sends_info, i);
     meta->num_incoming += info->count;
     if (*(int *) sc_array_index_int (meta->senders, i) == meta->mpirank) {
       /* if we count the weight of the message from our rank, we would end up
-       * counting points we already have available locally twice */
+       * counting queries we already have available locally twice */
       meta->weight_already_local += info->weight;
     }
     else {
@@ -2131,8 +2132,8 @@ update_offsets_and_num_incoming (p4est_transfer_meta_t *meta)
   meta->num_incoming = 0;
   for (is = 0; is < meta->senders->elem_count; is++) {
     if (*(int *) sc_array_index (meta->senders, is) == meta->mpirank) {
-      /* For a ratio larger than 1. only the points from a process for itself
-       * will be correctly transfered to the new points buffer. We can achieve
+      /* For a ratio larger than 1. only the queries from a process for itself
+       * will be correctly transfered to the new queries buffer. We can achieve
        * this by updating num_incoming and resetting the offset of this rank's
        * message to be at the beginning of the send_buffer. */
       info = (p4est_transfer_info_t *) sc_array_index (meta->sends_info, is);
@@ -2146,13 +2147,13 @@ update_offsets_and_num_incoming (p4est_transfer_meta_t *meta)
  *  If there is a message for ourselves, then we copy it manually here rather
  *  than receiving it through MPI.
  *
- *  We expect to receive points from each sender in meta->senders. The number
- *  of points each sender is sending is stored in meta->sends_info (with
+ *  We expect to receive queries from each sender in meta->senders. The number
+ *  of queries each sender is sending is stored in meta->sends_info (with
  *  corresponding indexing). We receive each message at the offset stored in
  *  meta->offsets (again with corresponding indexing).
  *
  *  \param[in] meta communication data
- *  \param[in,out] recv_buffer points to array where received points are stored
+ *  \param[in,out] recv_buffer points to array where received queries are stored
  *  \param[out] req request storage of same length as meta->senders
  */
 static void
@@ -2179,15 +2180,15 @@ post_receives (p4est_transfer_meta_t *meta,
       self_dest = ((char *) recv_buffer) + meta->offsets[i];
     }
     else if (internal->compute_weights && meta->ratio > 1.) {
-      /* we do not receive any points, if the local max_weight would be exceeded
-       * we can still copy the already local points, as they are already
+      /* we do not receive any queries, if the local max_weight would be exceeded
+       * we can still copy the already local queries, as they are already
        * accounted for in the ratio calculation */
       req[i] = sc_MPI_REQUEST_NULL;
     }
     else {
-      /* post non-blocking receive for points from q */
+      /* post non-blocking receive for queries from q */
       mpiret = sc_MPI_Irecv (((char *) recv_buffer) + meta->offsets[i],
-                             info->count * meta->point_size,
+                             info->count * meta->query_size,
                              sc_MPI_BYTE, q, 0, meta->mpicomm, req + i);
       SC_CHECK_MPI (mpiret);
     }
@@ -2204,7 +2205,7 @@ post_receives (p4est_transfer_meta_t *meta,
     P4EST_ASSERT (*(int *) sc_array_index (meta->receivers, ibz) ==
                   meta->mpirank);
     b = (sc_array_t *) sc_array_index (meta->send_buffers, ibz);
-    memcpy (self_dest, b->array, b->elem_count * meta->point_size);
+    memcpy (self_dest, b->array, b->elem_count * meta->query_size);
   }
 }
 
@@ -2219,9 +2220,9 @@ static int
      p4est_transfer_search_internal (p4est_transfer_internal_t *internal);
 
 int
-p4est_transfer_search (p4est_t *p4est, p4est_points_context_t *c,
+p4est_transfer_search (p4est_t *p4est, p4est_queries_context_t *c,
                        p4est_intersect_t intersect_fn, size_t max_weight,
-                       p4est_point_weight_t point_weight_fn, int save_unowned)
+                       p4est_query_weight_t query_weight_fn, int save_unowned)
 {
   int                 err;
 
@@ -2230,11 +2231,11 @@ p4est_transfer_search (p4est_t *p4est, p4est_points_context_t *c,
   memset (&internal, 0, sizeof (internal));
 
   /* Assign context information */
-  P4EST_ASSERT (p4est_points_context_is_valid (c));
+  P4EST_ASSERT (p4est_queries_context_is_valid (c));
   internal.c = c;
   internal.intersect_fn = intersect_fn;
   internal.max_weight = max_weight;
-  internal.point_weight_fn = point_weight_fn;
+  internal.query_weight_fn = query_weight_fn;
   internal.p4est = p4est;
   internal.mpicomm = p4est->mpicomm;
   internal.save_unowned = save_unowned;
@@ -2264,9 +2265,9 @@ p4est_transfer_search_gfp (const p4est_quadrant_t *gfp, int nmemb,
                            p4est_topidx_t num_trees,
                            void *user_pointer,
                            sc_MPI_Comm mpicomm,
-                           p4est_points_context_t *c,
+                           p4est_queries_context_t *c,
                            p4est_intersect_t intersect_fn, size_t max_weight,
-                           p4est_point_weight_t point_weight_fn,
+                           p4est_query_weight_t query_weight_fn,
                            int save_unowned)
 {
   /* Init internal context */
@@ -2274,11 +2275,11 @@ p4est_transfer_search_gfp (const p4est_quadrant_t *gfp, int nmemb,
   memset (&internal, 0, sizeof (internal));
 
   /* Assign context information */
-  P4EST_ASSERT (p4est_points_context_is_valid (c));
+  P4EST_ASSERT (p4est_queries_context_is_valid (c));
   internal.c = c;
   internal.intersect_fn = intersect_fn;
   internal.max_weight = max_weight;
-  internal.point_weight_fn = point_weight_fn;
+  internal.query_weight_fn = query_weight_fn;
   internal.user_pointer = user_pointer;
   internal.mpicomm = mpicomm;
   internal.save_unowned = save_unowned;
@@ -2304,13 +2305,13 @@ p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
   int                 errsend = 0;
   int                 err = 0;
   size_t              weight_local;
-  p4est_points_context_t *c = internal->c;
-  const size_t        point_size = c->points->elem_size;
+  p4est_queries_context_t *c = internal->c;
+  const size_t        query_size = c->queries->elem_size;
   p4est_transfer_meta_t resp;
   p4est_transfer_meta_t own;
   size_t              ibz;
 
-  /* Point context to communication metadata */
+  /* Query context to communication metadata */
   internal->resp = &resp;
   internal->own = &own;
 
@@ -2320,12 +2321,12 @@ p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
   /* requests for receiving from senders */
   sc_MPI_Request     *recv_req = NULL;
   int                 num_recv_reqs;
-  /* number of unowned points that this process will store */
+  /* number of unowned queries that this process will store */
   size_t              num_unowned = 0;
-  /* number of incoming points */
+  /* number of incoming queries */
   size_t              num_incoming;
 
-  /* Drop replicated points from old unsent messages */
+  /* Drop replicated queries from old unsent messages */
   if (c->own_buffers != NULL) {
     for (ibz = 0; ibz < c->own_buffers->elem_count; ibz++) {
       sc_array_reset ((sc_array_t *) sc_array_index (c->own_buffers, ibz));
@@ -2336,15 +2337,15 @@ p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
   }
 
   /* Init metadata fields to NULL */
-  init_transfer_meta (&resp, point_size, mpicomm);
-  init_transfer_meta (&own, point_size, mpicomm);
+  init_transfer_meta (&resp, query_size, mpicomm);
+  init_transfer_meta (&own, query_size, mpicomm);
 
   /* check, if we want to compute weights throughout the transfer */
-  internal->compute_weights = (internal->point_weight_fn != NULL);
+  internal->compute_weights = (internal->query_weight_fn != NULL);
 
-  /* Init unowned points store */
+  /* Init unowned queries store */
   if (internal->save_unowned) {
-    internal->unowned_points = sc_array_new (point_size);
+    internal->unowned_queries = sc_array_new (query_size);
   }
 
   /* Get rank and total process count */
@@ -2353,14 +2354,14 @@ p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
 
   weight_local = 0;
   if (internal->compute_weights) {
-    weight_local = compute_local_point_weights (internal);
+    weight_local = compute_local_query_weights (internal);
     /* we can only guarantee to stay below the max_weight, if the local weight
      * does not already exceed it on input */
     P4EST_ASSERT (weight_local < internal->max_weight);
   }
 
-  /* use search_partition to put points in appropriate send buffers */
-  /* record which processes p is sending points to and how many points each
+  /* use search_partition to put queries in appropriate send buffers */
+  /* record which processes p is sending queries to and how many queries each
      process receives */
   /* note: an error is recorded here if p is attempting to send more than
      INT_MAX bytes in an own or resp message to another process. We defer
@@ -2404,8 +2405,8 @@ p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
   /* if any process had an error we clean up and exit */
   if (err) {
     /* clean up send data */
-    if (internal->unowned_points != NULL) {
-      sc_array_destroy_null (&internal->unowned_points);
+    if (internal->unowned_queries != NULL) {
+      sc_array_destroy_null (&internal->unowned_queries);
     }
     destroy_transfer_meta (&resp);
     destroy_transfer_meta (&own);
@@ -2415,8 +2416,8 @@ p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
     return 1;
   }
 
-  /* notify processes receiving points from p and determine processes sending
-     to p. Also exchange counts of points being sent. */
+  /* notify processes receiving queries from p and determine processes sending
+     to p. Also exchange counts of queries being sent. */
   sc_notify_ext (own.receivers, own.senders, own.recvs_info,
                  own.sends_info, mpicomm);
   sc_notify_ext (resp.receivers, resp.senders, resp.recvs_info,
@@ -2426,14 +2427,14 @@ p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
   P4EST_ASSERT (own.senders->elem_count == own.sends_info->elem_count);
   P4EST_ASSERT (resp.senders->elem_count == resp.sends_info->elem_count);
 
-  /* compute number of incoming points, and offsets to store each message */
+  /* compute number of incoming queries, and offsets to store each message */
   compute_offsets_and_num_incoming (&own);
   compute_offsets_and_num_incoming (&resp);
 
   if (internal->compute_weights) {
     /* compute the ratio by which we would need to decrease the weight of the
-     * incoming points in order to stay below max_weight, even if we can not
-     * send any of the local points to another process and thus have to keep
+     * incoming queries in order to stay below max_weight, even if we can not
+     * send any of the local queries to another process and thus have to keep
      * all of them */
     c->ratio = resp.ratio = own.ratio =
       ((double) resp.weight_incoming +
@@ -2445,7 +2446,7 @@ p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
       update_offsets_and_num_incoming (&resp);
       update_offsets_and_num_incoming (&own);
 
-      /* store sender arrays in point structure */
+      /* store sender arrays in query structure */
       c->resp_senders = copy_senders_without_own_rank (&resp);
       c->own_senders = copy_senders_without_own_rank (&own);
     }
@@ -2464,7 +2465,7 @@ p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
   /* initialize request array for outgoing messages */
   send_req = P4EST_ALLOC (sc_MPI_Request, num_send_reqs);
 
-  /* post non-blocking sends and store unsent messages in point context */
+  /* post non-blocking sends and store unsent messages in query context */
   if (resp.have_unsent) {
     c->resp_buffers = sc_array_new (sizeof (sc_array_t));
     c->resp_receivers = sc_array_new (sizeof (int));
@@ -2481,21 +2482,21 @@ p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
               c->own_buffers, c->own_receivers, c->own_ratios);
 
   if (internal->save_unowned) {
-    num_unowned = internal->unowned_points->elem_count;
+    num_unowned = internal->unowned_queries->elem_count;
   }
 
-  /* total number of points that we are receiving */
+  /* total number of queries that we are receiving */
   num_incoming = num_unowned + resp.num_incoming + own.num_incoming;
 
-  /* check that we do not receive more than P4EST_LOCIDX_MAX points */
+  /* check that we do not receive more than P4EST_LOCIDX_MAX queries */
   if (num_incoming > (size_t) P4EST_LOCIDX_MAX) {
     errsend = 1;
-    P4EST_LERRORF ("Rank %d would receive %lld points, which exceeds "
+    P4EST_LERRORF ("Rank %d would receive %lld queries, which exceeds "
                    "P4EST_LOCIDX_MAX\n", resp.mpirank,
                    (long long) num_incoming);
   }
 
-  /* synchronise possible error of a process receiving too many points */
+  /* synchronise possible error of a process receiving too many queries */
   mpiret =
     sc_MPI_Allreduce (&errsend, &err, 1, sc_MPI_INT, sc_MPI_LOR, mpicomm);
   SC_CHECK_MPI (mpiret);
@@ -2503,8 +2504,8 @@ p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
   /* if any process had an error we clean up and exit */
   if (err) {
     /* clean up send data */
-    if (internal->unowned_points != NULL) {
-      sc_array_destroy_null (&internal->unowned_points);
+    if (internal->unowned_queries != NULL) {
+      sc_array_destroy_null (&internal->unowned_queries);
     }
     destroy_transfer_meta (&resp);
     destroy_transfer_meta (&own);
@@ -2515,17 +2516,17 @@ p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
   }
 
   /* we delay changing c until all possible soft errors have been checked */
-  /* free the points we received last iteration */
-  sc_array_destroy_null (&c->points);
+  /* free the queries we received last iteration */
+  sc_array_destroy_null (&c->queries);
 
-  /* update count of points we are responsible for */
+  /* update count of queries we are responsible for */
   c->num_respon = (p4est_locidx_t) (resp.num_incoming + num_unowned);
 
-  /* update count of *unowned* points we are responsible for */
+  /* update count of *unowned* queries we are responsible for */
   c->num_unowned = (p4est_locidx_t) num_unowned;
 
-  /* allocate memory for incoming points */
-  c->points = sc_array_new_count (point_size, num_incoming);
+  /* allocate memory for incoming queries */
+  c->queries = sc_array_new_count (query_size, num_incoming);
 
   /* total number of messages received */
   num_recv_reqs = (int) (own.senders->elem_count + resp.senders->elem_count);
@@ -2534,16 +2535,16 @@ p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
   recv_req = P4EST_ALLOC (sc_MPI_Request, num_recv_reqs);
 
   /* post non-blocking receives */
-  post_receives (&resp, internal, c->points->array + num_unowned * point_size,
-                 recv_req);
+  post_receives (&resp, internal,
+                 c->queries->array + num_unowned * query_size, recv_req);
   post_receives (&own, internal,
-                 c->points->array + resp.num_incoming * point_size,
+                 c->queries->array + resp.num_incoming * query_size,
                  recv_req + resp.senders->elem_count);
 
-  /* copy unowned points from buffer */
+  /* copy unowned queries from buffer */
   if (internal->save_unowned) {
-    memcpy (c->points->array, internal->unowned_points->array,
-            num_unowned * point_size);
+    memcpy (c->queries->array, internal->unowned_queries->array,
+            num_unowned * query_size);
   }
 
   /* wait for messages to send */
@@ -2555,29 +2556,29 @@ p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
   SC_CHECK_MPI (mpiret);
 
   /* clean up communication metadata */
-  if (internal->unowned_points != NULL) {
-    sc_array_destroy_null (&internal->unowned_points);
+  if (internal->unowned_queries != NULL) {
+    sc_array_destroy_null (&internal->unowned_queries);
   }
   destroy_transfer_meta (&resp);
   destroy_transfer_meta (&own);
   P4EST_FREE (send_req);
   P4EST_FREE (recv_req);
 
-  /* assign locally known point number for consistency */
-  c->num_known = (p4est_locidx_t) c->points->elem_count;
-  P4EST_ASSERT (p4est_points_context_is_valid (c));
+  /* assign locally known query number for consistency */
+  c->num_known = (p4est_locidx_t) c->queries->elem_count;
+  P4EST_ASSERT (p4est_queries_context_is_valid (c));
 
   /* return success */
   return 0;
 }
 
 void
-p4est_destroy_points_context (p4est_points_context_t *c)
+p4est_destroy_queries_context (p4est_queries_context_t *c)
 {
   size_t              ibz;
 
-  P4EST_ASSERT (c->points != NULL);
-  sc_array_destroy_null (&c->points);
+  P4EST_ASSERT (c->queries != NULL);
+  sc_array_destroy_null (&c->queries);
   if (c->resp_buffers != NULL) {
     P4EST_ASSERT (c->resp_receivers != NULL && c->resp_ratios != NULL);
     for (ibz = 0; ibz < c->resp_buffers->elem_count; ibz++) {
