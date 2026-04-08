@@ -658,10 +658,6 @@ typedef struct p8est_queries_context
    */
   sc_array_t         *queries;
 
-  /** Number of queries known to process, in other words length of \a queries.
-   */
-  p4est_locidx_t      num_known;
-
   /** The number of queries this process is responsible for propagating when
    * \ref p8est_transfer_search is called.  These queries are stored in the
    * first \a num_respon positions of \a queries.

@@ -1657,7 +1657,7 @@ p4est_queries_context_is_valid (p4est_queries_context_t *c)
   if (!(0 <= c->num_outside && c->num_outside <= c->num_respon)) {
     return 0;
   }
-  if (!(c->num_respon <= c->num_known && (size_t) c->num_known == count)) {
+  if ((size_t) c->num_respon > count) {
     return 0;
   }
 
@@ -1674,7 +1674,6 @@ p4est_queries_context_new (sc_array_t * queries)
 
   /* take responsibility for complete queries array */
   c->queries = queries;
-  c->num_known = queries->elem_count;
   c->num_respon = queries->elem_count;
   c->num_outside = 0;
 
@@ -2565,8 +2564,7 @@ p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
   P4EST_FREE (send_req);
   P4EST_FREE (recv_req);
 
-  /* assign locally known query number for consistency */
-  c->num_known = (p4est_locidx_t) c->queries->elem_count;
+  /* verify we leave the function with a valid context */
   P4EST_ASSERT (p4est_queries_context_is_valid (c));
 
   /* return success */
