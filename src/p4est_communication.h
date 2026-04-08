@@ -743,7 +743,7 @@ p4est_queries_context_t;
  * calling process, as all other queries would be deleted on entry of the next
  * call of \ref p4est_transfer_search anyways.
  */
-p4est_queries_context_t *p4est_new_queries_context (sc_array_t *queries);
+p4est_queries_context_t *p4est_queries_context_new (sc_array_t *queries);
 
 /** Collective, point-to-point transfer for maintaining distributed
  * collection of queries. After communication, queries are stored (only) on the
@@ -833,6 +833,6 @@ int                 p4est_transfer_search_gfp (const p4est_quadrant_t *gfp,
 SC_EXTERN_C_END;
 
 /** Destroy a p4est_queries_context_t and free all query arrays it contains. */
-void                p4est_destroy_queries_context (p4est_queries_context_t *c);
+void                p4est_queries_context_destroy (p4est_queries_context_t *c);
 
 #endif /* !P4EST_COMMUNICATION_H */

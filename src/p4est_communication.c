@@ -1668,7 +1668,7 @@ p4est_queries_context_is_valid (p4est_queries_context_t *c)
 #endif
 
 p4est_queries_context_t *
-p4est_new_queries_context (sc_array_t * queries)
+p4est_queries_context_new (sc_array_t * queries)
 {
   p4est_queries_context_t *c = P4EST_ALLOC (p4est_queries_context_t, 1);
 
@@ -2573,7 +2573,7 @@ p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
 }
 
 void
-p4est_destroy_queries_context (p4est_queries_context_t *c)
+p4est_queries_context_destroy (p4est_queries_context_t *c)
 {
   size_t              ibz;
 
