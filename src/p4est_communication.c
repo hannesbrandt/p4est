@@ -2590,6 +2590,9 @@ p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
   /* allocate memory for incoming queries */
   c->queries = sc_array_new_count (query_size, num_incoming);
 
+  /* verify the updated values yield a valid query context */
+  P4EST_ASSERT (p4est_queries_context_is_valid (c));
+
   /* total number of messages received */
   num_recv_reqs = (int) (dup.senders->elem_count + resp.senders->elem_count);
 
@@ -2624,9 +2627,6 @@ p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
   destroy_transfer_meta (&dup);
   P4EST_FREE (send_req);
   P4EST_FREE (recv_req);
-
-  /* verify we leave the function with a valid context */
-  P4EST_ASSERT (p4est_queries_context_is_valid (c));
 
   /* return success */
   return 0;
