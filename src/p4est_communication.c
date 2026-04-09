@@ -1592,6 +1592,7 @@ destroy_transfer_meta (p4est_transfer_meta_t *meta)
     sc_array_destroy_null (&meta->sends_info);
   }
   P4EST_FREE (meta->offsets);
+  P4EST_FREE (meta);
 }
 
 /** Internal context for \ref p4est_transfer_search.
@@ -1637,6 +1638,12 @@ typedef struct p4est_transfer_internal
 
   /* config option to save queries outside by any process */
   int                 save_outside;
+
+  /* MPI context data for transfer from _begin to _end */
+  int                 num_senders;      /**< Sender process count. */
+  int                 num_receivers;    /**< Receiver process count. */
+  sc_MPI_Request     *recv_req; /**< Array of receive requests. */
+  sc_MPI_Request     *send_req; /**< Array of send requests. */
 }
 p4est_transfer_internal_t;
 
@@ -2251,7 +2258,10 @@ free_dup_buffers (p4est_queries_context_t *c)
  * \param[in] num_trees Tree number must match the contents of \a gfp.
  */
 static int
-     p4est_transfer_search_internal (p4est_transfer_internal_t *internal);
+     p4est_transfer_search_internal_begin (p4est_transfer_internal_t *internal);
+
+static int
+     p4est_transfer_search_internal_end (p4est_transfer_internal_t *internal);
 
 int
 p4est_transfer_search (p4est_t *p4est, p4est_queries_context_t *c,
@@ -2283,8 +2293,12 @@ p4est_transfer_search (p4est_t *p4est, p4est_queries_context_t *c,
   /* Temporarily replace user pointer with internal context */
   p4est->user_pointer = &internal;
 
-  /* Enter transfer search */
-  err = p4est_transfer_search_internal (&internal);
+  /* Call internal transfer search */
+  err = p4est_transfer_search_internal_begin (&internal);
+  if (err == 0) {
+    /* Only call end if begin exits without an error */
+    err = p4est_transfer_search_internal_end (&internal);
+  }
 
   /* Restore user pointer */
   p4est->user_pointer = internal.user_pointer;
@@ -2325,8 +2339,12 @@ p4est_transfer_search_ext (p4est_t *p4est, p4est_queries_context_t *c,
   /* Temporarily replace user pointer with internal context */
   p4est->user_pointer = &internal;
 
-  /* Enter transfer search */
-  err = p4est_transfer_search_internal (&internal);
+  /* Call internal transfer search */
+  err = p4est_transfer_search_internal_begin (&internal);
+  if (err == 0) {
+    /* Only call end if begin exits without an error */
+    err = p4est_transfer_search_internal_end (&internal);
+  }
 
   /* Restore user pointer */
   p4est->user_pointer = internal.user_pointer;
@@ -2346,6 +2364,8 @@ p4est_transfer_search_gfp_ext (const p4est_quadrant_t *gfp, int nmemb,
                                p4est_query_weight_t query_weight_fn,
                                int save_outside)
 {
+  int err;
+
   /* Init internal context */
   p4est_transfer_internal_t internal;
   memset (&internal, 0, sizeof (internal));
@@ -2368,12 +2388,18 @@ p4est_transfer_search_gfp_ext (const p4est_quadrant_t *gfp, int nmemb,
   internal.nmemb = nmemb;
   internal.num_trees = num_trees;
 
-  /* Enter transfer search */
-  return p4est_transfer_search_internal (&internal);
+  /* Call internal transfer search */
+  err = p4est_transfer_search_internal_begin (&internal);
+  if (err == 0) {
+    /* Only call end if begin exits without an error */
+    err = p4est_transfer_search_internal_end (&internal);
+  }
+
+  return err;
 }
 
-int
-p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
+static int
+p4est_transfer_search_internal_begin (p4est_transfer_internal_t *internal)
 {
   int                 mpiret;
   int                 num_procs;
@@ -2383,30 +2409,30 @@ p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
   size_t              weight_local;
   p4est_queries_context_t *c = internal->c;
   const size_t        query_size = c->queries->elem_size;
-  p4est_transfer_meta_t resp;
-  p4est_transfer_meta_t dup;
-
-  /* Query context to communication metadata */
-  internal->resp = &resp;
-  internal->dup = &dup;
-
-  /* requests for sending to receivers */
-  sc_MPI_Request     *send_req = NULL;
-  int                 num_send_reqs = -1;
-  /* requests for receiving from senders */
-  sc_MPI_Request     *recv_req = NULL;
-  int                 num_recv_reqs;
+  p4est_transfer_meta_t *resp;
+  p4est_transfer_meta_t *dup;
   /* number of outside queries that this process will store */
   size_t              num_outside = 0;
   /* number of incoming queries */
   size_t              num_incoming;
 
+  /* Query context to communication metadata */
+  internal->resp = resp = P4EST_ALLOC (p4est_transfer_meta_t, 1);
+  internal->dup = dup = P4EST_ALLOC (p4est_transfer_meta_t, 1);
+
+  /* requests for sending to receivers */
+  internal->send_req = NULL;
+  internal->num_senders = -1;
+  /* requests for receiving from senders */
+  internal->recv_req = NULL;
+  internal->num_receivers = -1;
+
   /* Drop duplicated queries from old unsent messages */
   free_dup_buffers (c);
 
   /* Init metadata fields to NULL */
-  init_transfer_meta (&resp, query_size, mpicomm);
-  init_transfer_meta (&dup, query_size, mpicomm);
+  init_transfer_meta (resp, query_size, mpicomm);
+  init_transfer_meta (dup, query_size, mpicomm);
 
   /* check, if we want to compute weights throughout the transfer */
   internal->compute_weights = (internal->query_weight_fn != NULL);
@@ -2451,13 +2477,13 @@ p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
     sc_array_destroy_null (&c->dup_senders);
   }
 
-  errsend = resp.errsend || dup.errsend;
+  errsend = resp->errsend || dup->errsend;
 
   /* sanity checks */
-  P4EST_ASSERT (resp.receivers->elem_count == resp.recvs_info->elem_count);
-  P4EST_ASSERT (resp.receivers->elem_count == resp.send_buffers->elem_count);
-  P4EST_ASSERT (dup.receivers->elem_count == dup.recvs_info->elem_count);
-  P4EST_ASSERT (dup.receivers->elem_count == dup.send_buffers->elem_count);
+  P4EST_ASSERT (resp->receivers->elem_count == resp->recvs_info->elem_count);
+  P4EST_ASSERT (resp->receivers->elem_count == resp->send_buffers->elem_count);
+  P4EST_ASSERT (dup->receivers->elem_count == dup->recvs_info->elem_count);
+  P4EST_ASSERT (dup->receivers->elem_count == dup->send_buffers->elem_count);
 
   /* synchronise possible message errors */
   mpiret =
@@ -2470,9 +2496,9 @@ p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
     if (internal->outside_queries != NULL) {
       sc_array_destroy_null (&internal->outside_queries);
     }
-    destroy_transfer_meta (&resp);
-    destroy_transfer_meta (&dup);
-    P4EST_FREE (send_req);
+    destroy_transfer_meta (resp);
+    destroy_transfer_meta (dup);
+    P4EST_FREE (internal->send_req);
 
     /* return failure */
     return 1;
@@ -2480,67 +2506,67 @@ p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
 
   /* notify processes receiving queries from p and determine processes sending
      to p. Also exchange counts of queries being sent. */
-  sc_notify_ext (dup.receivers, dup.senders, dup.recvs_info,
-                 dup.sends_info, mpicomm);
-  sc_notify_ext (resp.receivers, resp.senders, resp.recvs_info,
-                 resp.sends_info, mpicomm);
+  sc_notify_ext (dup->receivers, dup->senders, dup->recvs_info,
+                 dup->sends_info, mpicomm);
+  sc_notify_ext (resp->receivers, resp->senders, resp->recvs_info,
+                 resp->sends_info, mpicomm);
 
   /* sanity checks */
-  P4EST_ASSERT (dup.senders->elem_count == dup.sends_info->elem_count);
-  P4EST_ASSERT (resp.senders->elem_count == resp.sends_info->elem_count);
+  P4EST_ASSERT (dup->senders->elem_count == dup->sends_info->elem_count);
+  P4EST_ASSERT (resp->senders->elem_count == resp->sends_info->elem_count);
 
   /* compute number of incoming queries, and offsets to store each message */
-  compute_offsets_and_num_incoming (&dup);
-  compute_offsets_and_num_incoming (&resp);
+  compute_offsets_and_num_incoming (dup);
+  compute_offsets_and_num_incoming (resp);
 
   if (internal->compute_weights) {
     /* compute the ratio by which we would need to decrease the weight of the
      * incoming queries in order to stay below max_weight, even if we can not
      * send any of the local queries to another process and thus have to keep
      * all of them */
-    c->ratio = resp.ratio = dup.ratio =
-      ((double) resp.weight_incoming +
-       dup.weight_incoming) / (internal->max_weight - weight_local);
+    c->ratio = resp->ratio = dup->ratio =
+      ((double) resp->weight_incoming +
+       dup->weight_incoming) / (internal->max_weight - weight_local);
 
     if (c->ratio > 1.) {
       /* adapt buffers to only allocate space for the message from this rank
        * to itself, as all other messages will not be sent */
-      update_offsets_and_num_incoming (&resp);
-      update_offsets_and_num_incoming (&dup);
+      update_offsets_and_num_incoming (resp);
+      update_offsets_and_num_incoming (dup);
 
       /* store sender arrays in query structure */
-      c->resp_senders = copy_senders_without_own_rank (&resp);
-      c->dup_senders = copy_senders_without_own_rank (&dup);
+      c->resp_senders = copy_senders_without_own_rank (resp);
+      c->dup_senders = copy_senders_without_own_rank (dup);
     }
 
     /* send the ratio to all processes that this process will receive messages
      * from */
-    exchange_ratios (&resp);
-    exchange_ratios (&dup);
+    exchange_ratios (resp);
+    exchange_ratios (dup);
   }
 
   /* total number of messages this process will send */
   /* conversion is safe as we don't expect 2*num_procs to overflow int */
-  num_send_reqs =
-    (int) (dup.receivers->elem_count + resp.receivers->elem_count);
+  internal->num_senders =
+    (int) (dup->receivers->elem_count + resp->receivers->elem_count);
 
   /* initialize request array for outgoing messages */
-  send_req = P4EST_ALLOC (sc_MPI_Request, num_send_reqs);
+  internal->send_req = P4EST_ALLOC (sc_MPI_Request, internal->num_senders);
 
   /* post non-blocking sends and store unsent messages in query context */
-  if (resp.have_unsent) {
+  if (resp->have_unsent) {
     c->resp_buffers = sc_array_new (sizeof (sc_array_t));
     c->resp_receivers = sc_array_new (sizeof (int));
     c->resp_ratios = sc_array_new (sizeof (double));
   }
-  if (dup.have_unsent) {
+  if (dup->have_unsent) {
     c->dup_buffers = sc_array_new (sizeof (sc_array_t));
     c->dup_receivers = sc_array_new (sizeof (int));
     c->dup_ratios = sc_array_new (sizeof (double));
   }
-  post_sends (&resp, internal, send_req, c->resp_buffers, c->resp_receivers,
+  post_sends (resp, internal, internal->send_req, c->resp_buffers, c->resp_receivers,
               c->resp_ratios);
-  post_sends (&dup, internal, send_req + resp.receivers->elem_count,
+  post_sends (dup, internal, internal->send_req + resp->receivers->elem_count,
               c->dup_buffers, c->dup_receivers, c->dup_ratios);
 
   if (internal->save_outside) {
@@ -2548,13 +2574,13 @@ p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
   }
 
   /* total number of queries that we are receiving */
-  num_incoming = num_outside + resp.num_incoming + dup.num_incoming;
+  num_incoming = num_outside + resp->num_incoming + dup->num_incoming;
 
   /* check that we do not receive more than P4EST_LOCIDX_MAX queries */
   if (num_incoming > (size_t) P4EST_LOCIDX_MAX) {
     errsend = 1;
     P4EST_LERRORF ("Rank %d would receive %lld queries, which exceeds "
-                   "P4EST_LOCIDX_MAX\n", resp.mpirank,
+                   "P4EST_LOCIDX_MAX\n", resp->mpirank,
                    (long long) num_incoming);
   }
 
@@ -2569,9 +2595,9 @@ p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
     if (internal->outside_queries != NULL) {
       sc_array_destroy_null (&internal->outside_queries);
     }
-    destroy_transfer_meta (&resp);
-    destroy_transfer_meta (&dup);
-    P4EST_FREE (send_req);
+    destroy_transfer_meta (resp);
+    destroy_transfer_meta (dup);
+    P4EST_FREE (internal->send_req);
 
     /* return failure */
     return 1;
@@ -2582,7 +2608,7 @@ p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
   sc_array_destroy_null (&c->queries);
 
   /* update count of queries we are responsible for */
-  c->num_resp = (p4est_locidx_t) (resp.num_incoming + num_outside);
+  c->num_resp = (p4est_locidx_t) (resp->num_incoming + num_outside);
 
   /* update count of *outside* queries we are responsible for */
   c->num_outside = (p4est_locidx_t) num_outside;
@@ -2594,17 +2620,17 @@ p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
   P4EST_ASSERT (p4est_queries_context_is_valid (c));
 
   /* total number of messages received */
-  num_recv_reqs = (int) (dup.senders->elem_count + resp.senders->elem_count);
+  internal->num_receivers = (int) (dup->senders->elem_count + resp->senders->elem_count);
 
   /* initialize request array for incoming messages */
-  recv_req = P4EST_ALLOC (sc_MPI_Request, num_recv_reqs);
+  internal->recv_req = P4EST_ALLOC (sc_MPI_Request, internal->num_receivers);
 
   /* post non-blocking receives */
-  post_receives (&resp, internal,
-                 c->queries->array + num_outside * query_size, recv_req);
-  post_receives (&dup, internal,
-                 c->queries->array + resp.num_incoming * query_size,
-                 recv_req + resp.senders->elem_count);
+  post_receives (resp, internal,
+                 c->queries->array + num_outside * query_size, internal->recv_req);
+  post_receives (dup, internal,
+                 c->queries->array + resp->num_incoming * query_size,
+                 internal->recv_req + resp->senders->elem_count);
 
   /* copy outside queries from buffer */
   if (internal->save_outside) {
@@ -2614,19 +2640,27 @@ p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
     sc_array_destroy_null (&internal->outside_queries);
   }
 
+  return 0;
+}
+
+static int
+p4est_transfer_search_internal_end (p4est_transfer_internal_t *internal)
+{
+  int mpiret;
+
   /* wait for messages to send */
-  mpiret = sc_MPI_Waitall (num_send_reqs, send_req, sc_MPI_STATUSES_IGNORE);
+  mpiret = sc_MPI_Waitall (internal->num_senders, internal->send_req, sc_MPI_STATUSES_IGNORE);
   SC_CHECK_MPI (mpiret);
 
   /* Wait to receive messages */
-  mpiret = sc_MPI_Waitall (num_recv_reqs, recv_req, sc_MPI_STATUSES_IGNORE);
+  mpiret = sc_MPI_Waitall (internal->num_receivers, internal->recv_req, sc_MPI_STATUSES_IGNORE);
   SC_CHECK_MPI (mpiret);
 
   /* clean up communication metadata */
-  destroy_transfer_meta (&resp);
-  destroy_transfer_meta (&dup);
-  P4EST_FREE (send_req);
-  P4EST_FREE (recv_req);
+  destroy_transfer_meta (internal->resp);
+  destroy_transfer_meta (internal->dup);
+  P4EST_FREE (internal->send_req);
+  P4EST_FREE (internal->recv_req);
 
   /* return success */
   return 0;
