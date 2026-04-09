@@ -2211,6 +2211,40 @@ post_receives (p4est_transfer_meta_t *meta,
   }
 }
 
+static void
+free_resp_buffers (p4est_queries_context_t *c)
+{
+  size_t              ibz;
+
+  if (c->resp_buffers != NULL) {
+    P4EST_ASSERT (c->resp_receivers != NULL && c->resp_ratios != NULL);
+    for (ibz = 0; ibz < c->resp_buffers->elem_count; ibz++) {
+      sc_array_reset ((sc_array_t *) sc_array_index (c->resp_buffers, ibz));
+    }
+    sc_array_destroy_null (&c->resp_buffers);
+    sc_array_destroy_null (&c->resp_receivers);
+    sc_array_destroy_null (&c->resp_ratios);
+  }
+}
+
+static void
+free_dup_buffers (p4est_queries_context_t *c)
+{
+  size_t              ibz;
+
+  if (c->dup_buffers != NULL) {
+    P4EST_ASSERT (c->dup_receivers != NULL && c->dup_ratios != NULL);
+    for (ibz = 0; ibz < c->dup_buffers->elem_count; ibz++) {
+      sc_array_reset ((sc_array_t *) sc_array_index (c->dup_buffers, ibz));
+    }
+    sc_array_destroy_null (&c->dup_buffers);
+    sc_array_destroy_null (&c->dup_receivers);
+    sc_array_destroy_null (&c->dup_ratios);
+  }
+}
+
+
+
 /** Central execution pathway for p4est_transfer_search and
  * p4est_transfer_search_gfp.
  *
@@ -2353,7 +2387,6 @@ p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
   const size_t        query_size = c->queries->elem_size;
   p4est_transfer_meta_t resp;
   p4est_transfer_meta_t dup;
-  size_t              ibz;
 
   /* Query context to communication metadata */
   internal->resp = &resp;
@@ -2370,15 +2403,8 @@ p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
   /* number of incoming queries */
   size_t              num_incoming;
 
-  /* Drop replicated queries from old unsent messages */
-  if (c->dup_buffers != NULL) {
-    for (ibz = 0; ibz < c->dup_buffers->elem_count; ibz++) {
-      sc_array_reset ((sc_array_t *) sc_array_index (c->dup_buffers, ibz));
-    }
-    sc_array_destroy_null (&c->dup_buffers);
-    sc_array_destroy_null (&c->dup_receivers);
-    sc_array_destroy_null (&c->dup_ratios);
-  }
+  /* Drop duplicated queries from old unsent messages */
+  free_dup_buffers (c);
 
   /* Init metadata fields to NULL */
   init_transfer_meta (&resp, query_size, mpicomm);
@@ -2392,7 +2418,7 @@ p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
     internal->outside_queries = sc_array_new (query_size);
   }
 
-  /* Get rank and total process count */
+  /* Get total process count */
   mpiret = sc_MPI_Comm_size (mpicomm, &num_procs);
   SC_CHECK_MPI (mpiret);
 
@@ -2415,14 +2441,8 @@ p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
 
   /* drop old unsent messages since we already distributed them to send
    * buffers according to the new partition. */
-  if (c->resp_buffers != NULL) {
-    for (ibz = 0; ibz < c->resp_buffers->elem_count; ibz++) {
-      sc_array_reset ((sc_array_t *) sc_array_index (c->resp_buffers, ibz));
-    }
-    sc_array_destroy_null (&c->resp_buffers);
-    sc_array_destroy_null (&c->resp_receivers);
-    sc_array_destroy_null (&c->resp_ratios);
-  }
+  free_resp_buffers (c);
+
   /* also drop old sender arrays, as they change with the partition */
   if (c->resp_senders != NULL) {
     P4EST_ASSERT (c->ratio > 1.);
@@ -2618,28 +2638,11 @@ p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
 void
 p4est_queries_context_destroy (p4est_queries_context_t *c)
 {
-  size_t              ibz;
-
   P4EST_ASSERT (c->queries != NULL);
   sc_array_destroy_null (&c->queries);
-  if (c->resp_buffers != NULL) {
-    P4EST_ASSERT (c->resp_receivers != NULL && c->resp_ratios != NULL);
-    for (ibz = 0; ibz < c->resp_buffers->elem_count; ibz++) {
-      sc_array_reset ((sc_array_t *) sc_array_index (c->resp_buffers, ibz));
-    }
-    sc_array_destroy (c->resp_buffers);
-    sc_array_destroy (c->resp_receivers);
-    sc_array_destroy (c->resp_ratios);
-  }
-  if (c->dup_buffers != NULL) {
-    P4EST_ASSERT (c->dup_receivers != NULL && c->dup_ratios != NULL);
-    for (ibz = 0; ibz < c->dup_buffers->elem_count; ibz++) {
-      sc_array_reset ((sc_array_t *) sc_array_index (c->dup_buffers, ibz));
-    }
-    sc_array_destroy (c->dup_buffers);
-    sc_array_destroy (c->dup_receivers);
-    sc_array_destroy (c->dup_ratios);
-  }
+
+  free_resp_buffers (c);
+  free_dup_buffers (c);
   if (c->resp_senders != NULL) {
     P4EST_ASSERT (c->ratio > 1.);
     sc_array_destroy (c->resp_senders);
