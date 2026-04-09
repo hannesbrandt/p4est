@@ -2260,14 +2260,57 @@ p4est_transfer_search (p4est_t *p4est, p4est_queries_context_t *c,
 }
 
 int
-p4est_transfer_search_gfp (const p4est_quadrant_t *gfp, int nmemb,
-                           p4est_topidx_t num_trees,
-                           void *user_pointer,
-                           sc_MPI_Comm mpicomm,
-                           p4est_queries_context_t *c,
+p4est_transfer_search_ext (p4est_t *p4est, p4est_queries_context_t *c,
                            p4est_intersect_t intersect_fn, size_t max_weight,
                            p4est_query_weight_t query_weight_fn,
                            int save_outside)
+{
+  int                 err;
+
+  /* Init internal context */
+  p4est_transfer_internal_t internal;
+  memset (&internal, 0, sizeof (internal));
+
+  /* Assign context information */
+  P4EST_ASSERT (p4est_queries_context_is_valid (c));
+  internal.c = c;
+  internal.intersect_fn = intersect_fn;
+  internal.max_weight = max_weight;
+  internal.query_weight_fn = query_weight_fn;
+  internal.p4est = p4est;
+  internal.mpicomm = p4est->mpicomm;
+  internal.save_outside = save_outside;
+
+  /* These variables are not used because internal.p4est is not NULL */
+  internal.gfp = NULL;
+  internal.nmemb = -1;
+  internal.num_trees = -1;
+
+  /* Store p4est user pointer inside internal context */
+  internal.user_pointer = p4est->user_pointer;
+  /* Temporarily replace user pointer with internal context */
+  p4est->user_pointer = &internal;
+
+  /* Enter transfer search */
+  err = p4est_transfer_search_internal (&internal);
+
+  /* Restore user pointer */
+  p4est->user_pointer = internal.user_pointer;
+
+  /* Return 0 if transfer was successful */
+  return err;
+}
+
+int
+p4est_transfer_search_gfp_ext (const p4est_quadrant_t *gfp, int nmemb,
+                               p4est_topidx_t num_trees,
+                               void *user_pointer,
+                               sc_MPI_Comm mpicomm,
+                               p4est_queries_context_t *c,
+                               p4est_intersect_t intersect_fn,
+                               size_t max_weight,
+                               p4est_query_weight_t query_weight_fn,
+                               int save_outside)
 {
   /* Init internal context */
   p4est_transfer_internal_t internal;

@@ -787,6 +787,56 @@ int                 p4est_transfer_search (p4est_t *p4est,
                                            p4est_queries_context_t *c,
                                            p4est_intersect_t intersect_fn);
 
+/** Collective, point-to-point transfer for maintaining distributed
+ * collection of queries. After communication, queries are stored (only) on the
+ * processes whose domains they intersect. A return value of 0 indicates
+ * success. An nonzero value is returned to indicate error. Errors occurs when
+ * the number of bytes transferred in any single message would exceed
+ * INT_MAX (2GB on most machines), or if any process would receive more than
+ * P4EST_LOCIDX_MAX queries in total. Error/success is collective. If an error
+ * does occur then the contents of \a c are not modified.
+ *
+ * Queries can be instances of an arbitrary struct. Query-quadrant intersection
+ * is specified by the user supplied callback \a intersect. A single query may
+ * intersect multiple process domains, and after communication will be known
+ * to each of these processes.
+ *
+ * Each process is responsible for propagating a subset of the queries it
+ * knows. Before communication, exactly one process should be responsible for
+ * propagating each query. The intersecting processes for each query are
+ * determined - by the responsible process - with \ref p4est_search_partition.
+ * Queries are then communicated to the relevant processes. The algorithm
+ * ensures that after communication exactly one process is responsible for the
+ * propagation of each query. This is the process with the lowest rank among
+ * processes intersecting the query. Queries known to a process before
+ * communication that do not intersect its domain are forgotten (this can be
+ * avoided using \ref p8est_transfer_search_ext).
+ *
+ * The queries that a process is responsible for propagating are stored in a
+ * subarray of the array of known queries, as described in
+ * \ref p4est_queries_context. Users should take care to maintain this
+ * subdivision if they modify the array of queries between rounds of
+ * communication.
+ *
+ * \param [in] p4est        The forest we search with. Its user_pointer is
+ *                          passed to the intersection callback.
+ * \param [in,out] c        Queries and propagation responsibilities. The
+ *                          array \a c.queries is destroyed and reallocated,
+ *                          so pointers to it should not be referenced after
+ *                          this function has been called.
+ * \param [in] intersect    Intersection callback.
+ * \param [in] save_outside If true then queries outside of the \a p4est are
+ *                          maintained by their propagating process.
+ * \return 0 if transfer was successful.
+ */
+int                 p4est_transfer_search_ext (p4est_t *p4est,
+                                               p4est_queries_context_t *c,
+                                               p4est_intersect_t intersect_fn,
+                                               size_t max_weight,
+                                               p4est_query_weight_t
+                                               query_weight_fn,
+                                               int save_outside);
+
 /** The same as \ref p4est_transfer_search, except that we search with a
  * partition, rather than an explicit p4est. The partition can be that of any
  * p4est, not necessarily known to the caller.
@@ -808,17 +858,18 @@ int                 p4est_transfer_search (p4est_t *p4est,
  *                          maintained by their propagating process
  * \return                  0 if transfer was successful.
  */
-int                 p4est_transfer_search_gfp (const p4est_quadrant_t *gfp,
-                                               int nmemb,
-                                               p4est_topidx_t num_trees,
-                                               void *user_pointer,
-                                               sc_MPI_Comm mpicomm,
-                                               p4est_queries_context_t *c,
-                                               p4est_intersect_t intersect_fn,
-                                               size_t max_weight,
-                                               p4est_query_weight_t
-                                               query_weight_fn,
-                                               int save_outside);
+int                 p4est_transfer_search_gfp_ext (const p4est_quadrant_t *gfp,
+                                                   int nmemb,
+                                                   p4est_topidx_t num_trees,
+                                                   void *user_pointer,
+                                                   sc_MPI_Comm mpicomm,
+                                                   p4est_queries_context_t *c,
+                                                   p4est_intersect_t
+                                                   intersect_fn,
+                                                   size_t max_weight,
+                                                   p4est_query_weight_t
+                                                   query_weight_fn,
+                                                   int save_outside);
 
 SC_EXTERN_C_END;
 

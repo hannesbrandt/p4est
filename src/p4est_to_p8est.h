@@ -515,7 +515,8 @@
 #define p4est_transfer_end              p8est_transfer_end
 #define p4est_queries_context_new       p8est_queries_context_new
 #define p4est_transfer_search           p8est_transfer_search
-#define p4est_transfer_search_gfp       p8est_transfer_search_gfp
+#define p4est_transfer_search_ext       p8est_transfer_search_ext
+#define p4est_transfer_search_gfp_ext   p8est_transfer_search_gfp_ext
 #define p4est_queries_context_destroy   p8est_queries_context_destroy
 
 /* functions in p4est_io */
