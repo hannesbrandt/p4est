@@ -2243,8 +2243,6 @@ free_dup_buffers (p4est_queries_context_t *c)
   }
 }
 
-
-
 /** Central execution pathway for p4est_transfer_search and
  * p4est_transfer_search_gfp.
  *
@@ -2607,8 +2605,10 @@ p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
 
   /* copy outside queries from buffer */
   if (internal->save_outside) {
+    P4EST_ASSERT (internal->outside_queries != NULL);
     memcpy (c->queries->array, internal->outside_queries->array,
             num_outside * query_size);
+    sc_array_destroy_null (&internal->outside_queries);
   }
 
   /* wait for messages to send */
@@ -2620,9 +2620,6 @@ p4est_transfer_search_internal (p4est_transfer_internal_t *internal)
   SC_CHECK_MPI (mpiret);
 
   /* clean up communication metadata */
-  if (internal->outside_queries != NULL) {
-    sc_array_destroy_null (&internal->outside_queries);
-  }
   destroy_transfer_meta (&resp);
   destroy_transfer_meta (&dup);
   P4EST_FREE (send_req);
