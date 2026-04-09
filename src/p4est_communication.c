@@ -2221,8 +2221,7 @@ static int
 
 int
 p4est_transfer_search (p4est_t *p4est, p4est_queries_context_t *c,
-                       p4est_intersect_t intersect_fn, size_t max_weight,
-                       p4est_query_weight_t query_weight_fn, int save_outside)
+                       p4est_intersect_t intersect_fn)
 {
   int                 err;
 
@@ -2234,11 +2233,11 @@ p4est_transfer_search (p4est_t *p4est, p4est_queries_context_t *c,
   P4EST_ASSERT (p4est_queries_context_is_valid (c));
   internal.c = c;
   internal.intersect_fn = intersect_fn;
-  internal.max_weight = max_weight;
-  internal.query_weight_fn = query_weight_fn;
+  internal.max_weight = -1;     /* marks that we do not work with weights */
+  internal.query_weight_fn = NULL;
   internal.p4est = p4est;
   internal.mpicomm = p4est->mpicomm;
-  internal.save_outside = save_outside;
+  internal.save_outside = 0;
 
   /* These variables are not used because internal.p4est is not NULL */
   internal.gfp = NULL;

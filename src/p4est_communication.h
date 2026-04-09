@@ -678,7 +678,8 @@ typedef struct p4est_queries_context
   /** The number of outside queries that this process is responsible for
    * propagating.  These queries are stored in the first \a num_outside
    * positions of \a queries. This is only relevant if \ref
-   * p4est_transfer_search is called with the \a save_outside option.
+   * p4est_transfer_search_ext was called with the \a save_outside option, else
+   * it is zero.
    */
   p4est_locidx_t      num_outside;
 
@@ -764,11 +765,8 @@ p4est_queries_context_t *p4est_queries_context_new (sc_array_t *queries);
  * ensures that after communication exactly one process is responsible for the
  * propagation of each query. This is the process with the lowest rank among
  * processes intersecting the query. Queries known to a process before
- * communication that do not intersect its domain are forgotten. The option
- * \a save_outside can be used to avoid forgetting queries that do not
- * intersect the domain of any process. If this option is enabled then these
- * queries are remembered by the process that was responsible for propagating
- * them.
+ * communication that do not intersect its domain are forgotten (this can be
+ * avoided using \ref p8est_transfer_search_ext).
  *
  * The queries that a process is responsible for propagating are stored in a
  * subarray of the array of known queries, as described in
@@ -783,16 +781,11 @@ p4est_queries_context_t *p4est_queries_context_new (sc_array_t *queries);
  *                          so pointers to it should not be referenced after
  *                          this function has been called.
  * \param [in] intersect    Intersection callback.
- * \param [in] save_outside If true then queries outside of the \a p4est are
- *                          maintained by their propagating process
  * \return 0 if transfer was successful.
  */
 int                 p4est_transfer_search (p4est_t *p4est,
                                            p4est_queries_context_t *c,
-                                           p4est_intersect_t intersect_fn,
-                                           size_t max_weight,
-                                           p4est_query_weight_t
-                                           query_weight_fn, int save_outside);
+                                           p4est_intersect_t intersect_fn);
 
 /** The same as \ref p4est_transfer_search, except that we search with a
  * partition, rather than an explicit p4est. The partition can be that of any
