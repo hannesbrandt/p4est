@@ -315,6 +315,8 @@
 #define p4est_save_ext                  p8est_save_ext
 #define p4est_load_ext                  p8est_load_ext
 #define p4est_source_ext                p8est_source_ext
+#define p4est_transfer_search_ext       p8est_transfer_search_ext
+#define p4est_transfer_search_gfp_ext   p8est_transfer_search_gfp_ext
 
 #ifdef P4EST_ENABLE_FILE_DEPRECATED
 
@@ -515,8 +517,6 @@
 #define p4est_transfer_end              p8est_transfer_end
 #define p4est_queries_context_new       p8est_queries_context_new
 #define p4est_transfer_search           p8est_transfer_search
-#define p4est_transfer_search_ext       p8est_transfer_search_ext
-#define p4est_transfer_search_gfp_ext   p8est_transfer_search_gfp_ext
 #define p4est_queries_context_destroy   p8est_queries_context_destroy
 
 /* functions in p4est_io */
