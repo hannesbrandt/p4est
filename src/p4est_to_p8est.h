@@ -176,6 +176,9 @@
 #define p4est_build_t                   p8est_build_t
 #define p4est_transfer_comm_t           p8est_transfer_comm_t
 #define p4est_transfer_context_t        p8est_transfer_context_t
+#define p4est_transfer_internal_s         p8est_transfer_internal_s
+#define p4est_transfer_internal_t         p8est_transfer_internal_t
+#define p4est_transfer_search_context_t p8est_transfer_search_context_t
 #define p4est_queries_context_t         p8est_queries_context_t
 #define p4est_intersect_t               p8est_intersect_t
 #define p4est_query_weight_t            p8est_query_weight_t
@@ -517,6 +520,8 @@
 #define p4est_transfer_end              p8est_transfer_end
 #define p4est_queries_context_new       p8est_queries_context_new
 #define p4est_transfer_search           p8est_transfer_search
+#define p4est_transfer_search_begin     p8est_transfer_search_begin
+#define p4est_transfer_search_end       p8est_transfer_search_end
 #define p4est_queries_context_destroy   p8est_queries_context_destroy
 
 /* functions in p4est_io */

@@ -733,6 +733,8 @@ p8est_queries_context_t;
  */
 p8est_queries_context_t *p8est_queries_context_new (sc_array_t *queries);
 
+typedef struct p8est_transfer_internal_s p8est_transfer_internal_t;
+
 /** Collective, point-to-point transfer for maintaining distributed
  * collection of queries. After communication, queries are stored (only) on the
  * processes whose domains they intersect. A return value of 0 indicates
@@ -776,6 +778,13 @@ p8est_queries_context_t *p8est_queries_context_new (sc_array_t *queries);
 int                 p8est_transfer_search (p8est_t *p8est,
                                            p8est_queries_context_t *c,
                                            p8est_intersect_t intersect_fn);
+
+p8est_transfer_internal_t *p8est_transfer_search_begin (p8est_t *p8est,
+                                                        p8est_queries_context_t *c,
+                                                        p8est_intersect_t
+                                                        intersect_fn);
+
+int                 p8est_transfer_search_end (p8est_transfer_internal_t *ti);
 
 SC_EXTERN_C_END;
 

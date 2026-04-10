@@ -1609,7 +1609,7 @@ destroy_transfer_meta (p4est_transfer_meta_t *meta)
  * Allows us to access the following variables in the query callback during
  * \ref p4est_search_partition.
  */
-typedef struct p4est_transfer_internal
+struct p4est_transfer_internal_s
 {
   /* query-quadrant intersection function */
   p4est_intersect_t   intersect_fn;
@@ -1653,8 +1653,8 @@ typedef struct p4est_transfer_internal
   int                 num_receivers;    /**< Receiver process count. */
   sc_MPI_Request     *recv_req; /**< Array of receive requests. */
   sc_MPI_Request     *send_req; /**< Array of send requests. */
-}
-p4est_transfer_internal_t;
+  int                 err;      /**< Current error status */
+};
 
 #ifdef P4EST_ENABLE_DEBUG
 
@@ -2267,10 +2267,10 @@ free_dup_buffers (p4est_queries_context_t *c)
  * \param[in] num_trees Tree number must match the contents of \a gfp.
  */
 static int
-     p4est_transfer_search_internal_begin (p4est_transfer_internal_t *internal);
+ p4est_transfer_search_internal_begin (p4est_transfer_internal_t *internal);
 
 static int
-     p4est_transfer_search_internal_end (p4est_transfer_internal_t *internal);
+ p4est_transfer_search_internal_end (p4est_transfer_internal_t *internal);
 
 int
 p4est_transfer_search (p4est_t *p4est, p4est_queries_context_t *c,
@@ -2313,6 +2313,63 @@ p4est_transfer_search (p4est_t *p4est, p4est_queries_context_t *c,
   p4est->user_pointer = internal.user_pointer;
 
   /* Return 0 if transfer was successful */
+  return err;
+}
+
+p4est_transfer_internal_t *
+p4est_transfer_search_begin (p4est_t * p4est,
+                             p4est_queries_context_t * c,
+                             p4est_intersect_t intersect_fn)
+{
+  /* Init internal context */
+  p4est_transfer_internal_t *internal =
+    P4EST_ALLOC (p4est_transfer_internal_t, 1);
+  memset (internal, 0, sizeof (p4est_transfer_internal_t));
+
+  /* Assign context information */
+  P4EST_ASSERT (p4est_queries_context_is_valid (c));
+  internal->c = c;
+  internal->intersect_fn = intersect_fn;
+  internal->max_weight = -1;    /* marks that we do not work with weights */
+  internal->query_weight_fn = NULL;
+  internal->p4est = p4est;
+  internal->mpicomm = p4est->mpicomm;
+  internal->save_outside = 0;
+
+  /* These variables are not used because internal.p4est is not NULL */
+  internal->gfp = NULL;
+  internal->nmemb = -1;
+  internal->num_trees = -1;
+
+  /* Store p4est user pointer inside internal context */
+  internal->user_pointer = p4est->user_pointer;
+  /* Temporarily replace user pointer with internal context */
+  p4est->user_pointer = internal;
+
+  /* Call internal transfer search */
+  internal->err = p4est_transfer_search_internal_begin (internal);
+
+  /* Return 0 if transfer was successful */
+  return internal;
+}
+
+int
+p4est_transfer_search_end (p4est_transfer_internal_t * internal)
+{
+  int                 err;
+
+  if (internal->err == 0) {
+    /* Only call end if begin exits without an error */
+    internal->err = p4est_transfer_search_internal_end (internal);
+  }
+
+  /* Restore user pointer */
+  internal->p4est->user_pointer = internal->user_pointer;
+
+  /* Free internal context */
+  err = internal->err;
+  P4EST_FREE (internal);
+
   return err;
 }
 
@@ -2426,8 +2483,8 @@ p4est_transfer_search_internal_begin (p4est_transfer_internal_t *internal)
   size_t              num_incoming;
 
   /* Query context to communication metadata */
-  internal->resp = resp = P4EST_ALLOC (p4est_transfer_meta_t, 1);
-  internal->dup = dup = P4EST_ALLOC (p4est_transfer_meta_t, 1);
+  resp = internal->resp = P4EST_ALLOC (p4est_transfer_meta_t, 1);
+  dup = internal->dup = P4EST_ALLOC (p4est_transfer_meta_t, 1);
 
   /* requests for sending to receivers */
   internal->send_req = NULL;
