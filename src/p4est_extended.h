@@ -675,7 +675,7 @@ p4est_transfer_internal_t *p4est_transfer_search_begin_ext (p4est_t *p4est,
  *                          maintained by their propagating process
  * \return                  0 if transfer was successful.
  */
-p4est_transfer_internal_t *p4est_transfer_search__begin_gfp_ext
+p4est_transfer_internal_t *p4est_transfer_search_begin_gfp_ext
   (const p4est_quadrant_t *gfp, int nmemb, p4est_topidx_t num_trees,
    void *user_pointer, sc_MPI_Comm mpicomm, p4est_queries_context_t *c,
    p4est_intersect_t intersect_fn, size_t max_weight,
