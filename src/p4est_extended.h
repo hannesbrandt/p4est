@@ -675,18 +675,11 @@ p4est_transfer_internal_t *p4est_transfer_search_begin_ext (p4est_t *p4est,
  *                          maintained by their propagating process
  * \return                  0 if transfer was successful.
  */
-int                 p4est_transfer_search_gfp_ext (const p4est_quadrant_t *gfp,
-                                                   int nmemb,
-                                                   p4est_topidx_t num_trees,
-                                                   void *user_pointer,
-                                                   sc_MPI_Comm mpicomm,
-                                                   p4est_queries_context_t *c,
-                                                   p4est_intersect_t
-                                                   intersect_fn,
-                                                   size_t max_weight,
-                                                   p4est_query_weight_t
-                                                   query_weight_fn,
-                                                   int save_outside);
+p4est_transfer_internal_t *p4est_transfer_search__begin_gfp_ext
+  (const p4est_quadrant_t *gfp, int nmemb, p4est_topidx_t num_trees,
+   void *user_pointer, sc_MPI_Comm mpicomm, p4est_queries_context_t *c,
+   p4est_intersect_t intersect_fn, size_t max_weight,
+   p4est_query_weight_t query_weight_fn, int save_outside);
 
 #ifdef P4EST_ENABLE_FILE_DEPRECATED
 

@@ -319,7 +319,7 @@
 #define p4est_load_ext                  p8est_load_ext
 #define p4est_source_ext                p8est_source_ext
 #define p4est_transfer_search_begin_ext p8est_transfer_search_begin_ext
-#define p4est_transfer_search_gfp_ext   p8est_transfer_search_gfp_ext
+#define p4est_transfer_search_begin_gfp_ext p8est_transfer_search_begin_gfp_ext
 
 #ifdef P4EST_ENABLE_FILE_DEPRECATED
 
