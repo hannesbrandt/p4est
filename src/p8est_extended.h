@@ -648,13 +648,15 @@ p8est_t            *p8est_source_ext (sc_io_source_t * src,
  * \param [in] intersect    Intersection callback.
  * \return                  0 if transfer was successful.
  */
-int                 p8est_transfer_search_ext (p8est_t *p8est,
-                                               p8est_queries_context_t *c,
-                                               p8est_intersect_t intersect_fn,
-                                               size_t max_weight,
-                                               p8est_query_weight_t
-                                               query_weight_fn,
-                                               int save_outside);
+p8est_transfer_internal_t *p8est_transfer_search_begin_ext (p8est_t *p8est,
+                                                            p8est_queries_context_t
+                                                            *c,
+                                                            p8est_intersect_t
+                                                            intersect_fn,
+                                                            size_t max_weight,
+                                                            p8est_query_weight_t
+                                                            query_weight_fn,
+                                                            int save_outside);
 
 /** The same as \ref p8est_transfer_search, except that we search with a
  * partition, rather than an explicit p8est. The partition can be that of any

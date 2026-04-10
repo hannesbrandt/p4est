@@ -2302,10 +2302,10 @@ p4est_transfer_search_begin (p4est_t * p4est,
   /* Temporarily replace user pointer with internal context */
   p4est->user_pointer = internal;
 
-  /* Call internal transfer search */
+  /* Call internal transfer search begin */
   internal->err = p4est_transfer_search_internal_begin (internal);
 
-  /* Return 0 if transfer was successful */
+  /* Return p4est_transfer_internal_t for usage in transfer_search_end */
   return internal;
 }
 
@@ -2333,58 +2333,49 @@ int
 p4est_transfer_search (p4est_t *p4est, p4est_queries_context_t *c,
                        p4est_intersect_t intersect_fn)
 {
-  p4est_transfer_internal_t *ti;
+  p4est_transfer_internal_t *internal;
 
   /* Call transfer search begin */
-  ti = p4est_transfer_search_begin (p4est, c, intersect_fn);
+  internal = p4est_transfer_search_begin (p4est, c, intersect_fn);
 
-  return p4est_transfer_search_end (ti);
+  return p4est_transfer_search_end (internal);
 }
 
-int
-p4est_transfer_search_ext (p4est_t *p4est, p4est_queries_context_t *c,
-                           p4est_intersect_t intersect_fn, size_t max_weight,
-                           p4est_query_weight_t query_weight_fn,
-                           int save_outside)
+p4est_transfer_internal_t *
+p4est_transfer_search_begin_ext (p4est_t *p4est, p4est_queries_context_t *c,
+                                 p4est_intersect_t intersect_fn, size_t max_weight,
+                                 p4est_query_weight_t query_weight_fn,
+                                 int save_outside)
 {
-  int                 err;
-
   /* Init internal context */
-  p4est_transfer_internal_t internal;
-  memset (&internal, 0, sizeof (internal));
+  p4est_transfer_internal_t *internal = P4EST_ALLOC (p4est_transfer_internal_t, 1);
+  memset (internal, 0, sizeof (p4est_transfer_internal_t));
 
   /* Assign context information */
   P4EST_ASSERT (p4est_queries_context_is_valid (c));
-  internal.c = c;
-  internal.intersect_fn = intersect_fn;
-  internal.max_weight = max_weight;
-  internal.query_weight_fn = query_weight_fn;
-  internal.p4est = p4est;
-  internal.mpicomm = p4est->mpicomm;
-  internal.save_outside = save_outside;
+  internal->c = c;
+  internal->intersect_fn = intersect_fn;
+  internal->max_weight = max_weight;
+  internal->query_weight_fn = query_weight_fn;
+  internal->p4est = p4est;
+  internal->mpicomm = p4est->mpicomm;
+  internal->save_outside = save_outside;
 
   /* These variables are not used because internal.p4est is not NULL */
-  internal.gfp = NULL;
-  internal.nmemb = -1;
-  internal.num_trees = -1;
+  internal->gfp = NULL;
+  internal->nmemb = -1;
+  internal->num_trees = -1;
 
   /* Store p4est user pointer inside internal context */
-  internal.user_pointer = p4est->user_pointer;
+  internal->user_pointer = p4est->user_pointer;
   /* Temporarily replace user pointer with internal context */
-  p4est->user_pointer = &internal;
+  p4est->user_pointer = internal;
 
-  /* Call internal transfer search */
-  err = p4est_transfer_search_internal_begin (&internal);
-  if (err == 0) {
-    /* Only call end if begin exits without an error */
-    err = p4est_transfer_search_internal_end (&internal);
-  }
+  /* Call internal transfer search begin */
+  internal->err = p4est_transfer_search_internal_begin (internal);
 
-  /* Restore user pointer */
-  p4est->user_pointer = internal.user_pointer;
-
-  /* Return 0 if transfer was successful */
-  return err;
+  /* Return p4est_transfer_internal_t for usage in transfer_search_end */
+  return internal;
 }
 
 int

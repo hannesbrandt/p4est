@@ -644,13 +644,15 @@ p4est_t            *p4est_source_ext (sc_io_source_t * src,
  *                          maintained by their propagating process.
  * \return 0 if transfer was successful.
  */
-int                 p4est_transfer_search_ext (p4est_t *p4est,
-                                               p4est_queries_context_t *c,
-                                               p4est_intersect_t intersect_fn,
-                                               size_t max_weight,
-                                               p4est_query_weight_t
-                                               query_weight_fn,
-                                               int save_outside);
+p4est_transfer_internal_t *p4est_transfer_search_begin_ext (p4est_t *p4est,
+                                                            p4est_queries_context_t
+                                                            *c,
+                                                            p4est_intersect_t
+                                                            intersect_fn,
+                                                            size_t max_weight,
+                                                            p4est_query_weight_t
+                                                            query_weight_fn,
+                                                            int save_outside);
 
 /** The same as \ref p4est_transfer_search, except that we search with a
  * partition, rather than an explicit p4est. The partition can be that of any
