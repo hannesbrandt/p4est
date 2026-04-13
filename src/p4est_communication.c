@@ -1847,53 +1847,39 @@ transfer_search_query (p4est_t *p4est, p4est_topidx_t which_tree,
   /* restore our internal context */
   p4est->user_pointer = internal;
 
-  /* if current quadrant has multiple owners */
-  if (pfirst < plast) {
-    /* query follows recursion when it intersects the quadrant */
-    return intersection_found;
+  /* if current quadrant has one owner, the partition search recursion ends */
+  if (pfirst == plast) {
+    /* get last process whose domain we have already recorded as intersecting
+     * this query */
+    last_proc = internal->last_procs[qi];
+
+    /* since we traverse in order we expect not to have seen this query in
+     * in higher process domains yet */
+    P4EST_ASSERT (last_proc <= pfirst);
+
+    if (last_proc == pfirst) {
+      /* we have found an already recorded process */
+      return 0;
+    }
+    /* otherwise we have found a new process intersecting the query */
+
+    /* record this new process */
+    internal->last_procs[qi] = pfirst;
+
+    /* add query to corresponding send buffer */
+    if (last_proc == -1) {
+      /* first process intersecting query should own it and be responsible for
+         its propagation */
+      push_to_send_buffer (resp, internal, qi, pfirst);
+    }
+    else {
+      /* process should receive duplicate of query but not be responsible for
+       * the query's propagation */
+      push_to_send_buffer (dup, internal, qi, pfirst);
+    }
   }
 
-  /* current quadrant has a single owner */
-  P4EST_ASSERT (pfirst == plast);
-
-  if (!intersection_found) {
-    /* query does not intersect this quadrant */
-    return 0;
-  }
-
-  /* get last process whose domain we have already recorded as intersecting
-   * this query
-   */
-  last_proc = internal->last_procs[qi];
-
-  /* since we traverse in order we expect not to have seen this query in
-   * in higher process domains yet
-   */
-  P4EST_ASSERT (last_proc <= pfirst);
-
-  if (last_proc == pfirst) {
-    /* we have found an already recorded process */
-    return 0;
-  }
-  /* otherwise we have found a new process intersecting the query */
-
-  /* record this new process */
-  internal->last_procs[qi] = pfirst;
-
-  /* add query to corresponding send buffer */
-  if (last_proc == -1) {
-    /* first process intersecting query should own it and be responsible for
-       its propagation */
-    push_to_send_buffer (resp, internal, qi, pfirst);
-  }
-  else {
-    /* process should receive duplicate of query but not be responsible for
-     * the query's propagation */
-    push_to_send_buffer (dup, internal, qi, pfirst);
-  }
-
-  /* end recursion */
-  return 0;
+  return intersection_found;
 }
 
 /** Prepare outgoing buffers of queries to propagate.
