@@ -1913,18 +1913,14 @@ compute_send_buffers (p4est_transfer_internal_t *internal)
   internal->last_procs = P4EST_ALLOC (int, num_queries);
   memset (internal->last_procs, -1, num_queries * sizeof (int));
 
-  /* set up search indices for partition search */
-  search_objects = sc_array_new_count (sizeof (size_t), num_queries);
-  for (iq = 0; iq < (size_t) num_queries; ++iq) {
-    *(size_t *) sc_array_index (search_objects, iq) = iq;
-  }
-
-  /* set up addresses of search objects */
+  /* set up array of query references and query indices */
   internal->query_references =
     sc_array_new_count (sizeof (void *), num_queries);
+  search_objects = sc_array_new_count (sizeof (size_t), num_queries);
   for (iq = 0; iq < (size_t) c->num_resp; iq++) {
     *(void **) sc_array_index (internal->query_references, iq) =
       sc_array_index (c->queries, iq);
+    *(size_t *) sc_array_index (search_objects, iq) = iq;
   }
   if (c->resp_buffers != NULL) {
     for (ib = 0; ib < c->resp_buffers->elem_count; ib++) {
@@ -1932,6 +1928,7 @@ compute_send_buffers (p4est_transfer_internal_t *internal)
       for (ibq = 0; ibq < buffer->elem_count; ibq++, iq++) {
         *(void **) sc_array_index (internal->query_references, iq) =
           sc_array_index (buffer, ibq);
+        *(size_t *) sc_array_index (search_objects, iq) = iq;
       }
     }
   }
