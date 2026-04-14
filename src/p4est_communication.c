@@ -1574,11 +1574,11 @@ destroy_transfer_meta (p4est_transfer_meta_t *meta)
       }
     }
     else {
+      /* the queries_context_t took ownership of all unsent arrays, so we can
+       * not reset them here */
       for (ibz = 0; ibz < meta->send_buffers->elem_count; ibz++) {
         if (*(double *) sc_array_index (meta->recvs_ratios, ibz) <= 1. ||
             *(int *) sc_array_index (meta->receivers, ibz) == meta->mpirank) {
-          /* the queries_context_t took ownership of all unsent arrays, so we can
-           * not reset them here */
           sc_array_reset ((sc_array_t *)
                           sc_array_index (meta->send_buffers, ibz));
         }
@@ -1630,10 +1630,12 @@ struct p4est_transfer_internal_s
   p4est_t            *p4est;
 
   /* weight computation */
-  int                 compute_weights;  /* flag indicating, if the user passed
-                                           a valid weight computation setup */
-  size_t              max_weight;       /* the maximum allowed weight per process */
-  p4est_query_weight_t query_weight_fn; /* callback to compute query weights */
+  int                 compute_weights;  /**< flag indicating, if the user passed
+                                             a valid weight computation setup */
+  size_t              max_weight;       /**< the maximum allowed weight per
+                                             process */
+  p4est_query_weight_t query_weight_fn; /**< callback to compute query
+                                             weights */
 
   /* data needed if we do not have a full p4est */
   /* global first position array */
@@ -1732,6 +1734,8 @@ compute_local_query_weights (p4est_transfer_internal_t *internal)
       }
     }
   }
+  /* c->own_buffers are not counted since they may not be local anymore in the
+   * current p4est and they are also out of this processes responsibility */
 
   return weight_local;
 }
@@ -1827,7 +1831,7 @@ transfer_search_query (p4est_t *p4est, p4est_topidx_t which_tree,
   /* last process which we recorded this query as being sent to */
   int                 last_proc;
 
-  /* query index and queries array */
+  /* query index */
   size_t              qi = *(size_t *) query_index;
 
   /* sanity checks */
@@ -1899,12 +1903,12 @@ compute_send_buffers (p4est_transfer_internal_t *internal)
    * struct or the remaining send buffers from previous iterations */
   num_queries = c->num_resp;
   if (c->resp_buffers != NULL) {
-    /* do not search dup_buffers again, as they contain duplicated queries */
     for (ib = 0; ib < c->resp_buffers->elem_count; ib++) {
       buffer = (sc_array_t *) sc_array_index (c->resp_buffers, ib);
       num_queries += (p4est_locidx_t) buffer->elem_count;
     }
   }
+  /* do not search dup_buffers again, as they contain duplicated queries */
 
   /* Initialize last_procs to -1 to signify no queries have been added to send
      buffers. */
@@ -2244,7 +2248,8 @@ free_dup_buffers (p4est_queries_context_t *c)
 }
 
 static void
-free_senders (p4est_queries_context_t *c) {
+free_senders (p4est_queries_context_t *c)
+{
   if (c->resp_senders != NULL) {
     P4EST_ASSERT (c->ratio > 1.);
     sc_array_destroy_null (&c->resp_senders);
