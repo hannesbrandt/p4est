@@ -2451,9 +2451,6 @@ p4est_transfer_search_internal_begin (p4est_transfer_internal_t *internal)
   internal->recv_req = NULL;
   internal->num_receivers = -1;
 
-  /* Drop duplicated queries from old unsent messages */
-  free_dup_buffers (c);
-
   /* Init metadata fields to NULL */
   init_transfer_meta (resp, query_size, mpicomm);
   init_transfer_meta (dup, query_size, mpicomm);
@@ -2482,15 +2479,6 @@ p4est_transfer_search_internal_begin (p4est_transfer_internal_t *internal)
      to avoid creating an unnecessary synchronisation point */
   compute_send_buffers (internal);
 
-  /* drop old unsent messages since we already distributed them to send
-   * buffers according to the new partition. */
-  free_resp_buffers (c);
-
-  /* also drop old sender arrays, as they change with the partition */
-  free_senders (c);
-
-  errsend = resp->errsend || dup->errsend;
-
   /* sanity checks */
   P4EST_ASSERT (resp->receivers->elem_count == resp->recvs_info->elem_count);
   P4EST_ASSERT (resp->receivers->elem_count ==
@@ -2499,6 +2487,7 @@ p4est_transfer_search_internal_begin (p4est_transfer_internal_t *internal)
   P4EST_ASSERT (dup->receivers->elem_count == dup->send_buffers->elem_count);
 
   /* synchronise possible message errors */
+  errsend = resp->errsend || dup->errsend;
   mpiret =
     sc_MPI_Allreduce (&errsend, &err, 1, sc_MPI_INT, sc_MPI_LOR, mpicomm);
   SC_CHECK_MPI (mpiret);
@@ -2523,6 +2512,11 @@ p4est_transfer_search_internal_begin (p4est_transfer_internal_t *internal)
                  dup->sends_info, mpicomm);
   sc_notify_ext (resp->receivers, resp->senders, resp->recvs_info,
                  resp->sends_info, mpicomm);
+
+  /* Drop old unsent messages and sender arrays, we now have new send buffers */
+  free_dup_buffers (c);
+  free_resp_buffers (c);
+  free_senders (c);
 
   /* sanity checks */
   P4EST_ASSERT (dup->senders->elem_count == dup->sends_info->elem_count);
