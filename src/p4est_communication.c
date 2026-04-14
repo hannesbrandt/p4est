@@ -1952,6 +1952,7 @@ compute_send_buffers (p4est_transfer_internal_t *internal)
 
   /* save queries that do not intersect any process domain, if configured to */
   if (internal->save_outside) {
+    internal->outside_queries = sc_array_new (c->queries->elem_size);
     for (iq = 0; iq < (size_t) num_queries; ++iq) {
       if (internal->last_procs[iq] == -1) {
         /* add query to outside queries buffer */
@@ -2441,11 +2442,6 @@ p4est_transfer_search_internal_begin (p4est_transfer_internal_t *internal)
 
   /* check, if we want to compute weights throughout the transfer */
   internal->compute_weights = (internal->query_weight_fn != NULL);
-
-  /* Init outside queries store */
-  if (internal->save_outside) {
-    internal->outside_queries = sc_array_new (query_size);
-  }
 
   /* Get total process count */
   mpiret = sc_MPI_Comm_size (mpicomm, &num_procs);
