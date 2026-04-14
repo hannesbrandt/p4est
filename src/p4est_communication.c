@@ -2243,6 +2243,19 @@ free_dup_buffers (p4est_queries_context_t *c)
   }
 }
 
+static void
+free_senders (p4est_queries_context_t *c) {
+  if (c->resp_senders != NULL) {
+    P4EST_ASSERT (c->ratio > 1.);
+    sc_array_destroy_null (&c->resp_senders);
+  }
+  if (c->dup_senders != NULL) {
+    P4EST_ASSERT (c->ratio > 1.);
+    sc_array_destroy_null (&c->dup_senders);
+  }
+
+}
+
 /** Central execution pathway for p4est_transfer_search and
  * p4est_transfer_search_gfp.
  *
@@ -2469,14 +2482,7 @@ p4est_transfer_search_internal_begin (p4est_transfer_internal_t *internal)
   free_resp_buffers (c);
 
   /* also drop old sender arrays, as they change with the partition */
-  if (c->resp_senders != NULL) {
-    P4EST_ASSERT (c->ratio > 1.);
-    sc_array_destroy_null (&c->resp_senders);
-  }
-  if (c->dup_senders != NULL) {
-    P4EST_ASSERT (c->ratio > 1.);
-    sc_array_destroy_null (&c->dup_senders);
-  }
+  free_senders (c);
 
   errsend = resp->errsend || dup->errsend;
 
@@ -2682,13 +2688,6 @@ p4est_queries_context_destroy (p4est_queries_context_t *c)
 
   free_resp_buffers (c);
   free_dup_buffers (c);
-  if (c->resp_senders != NULL) {
-    P4EST_ASSERT (c->ratio > 1.);
-    sc_array_destroy (c->resp_senders);
-  }
-  if (c->dup_senders != NULL) {
-    P4EST_ASSERT (c->ratio > 1.);
-    sc_array_destroy (c->dup_senders);
-  }
+  free_senders (c);
   P4EST_FREE (c);
 }
