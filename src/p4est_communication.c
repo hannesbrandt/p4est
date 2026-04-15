@@ -1852,7 +1852,7 @@ transfer_search_query (p4est_t *p4est, p4est_topidx_t which_tree,
   p4est->user_pointer = internal;
 
   /* if current quadrant has one owner, the partition search recursion ends */
-  if (pfirst == plast) {
+  if (pfirst == plast && intersection_found) {
     /* get last process whose domain we have already recorded as intersecting
      * this query */
     last_proc = internal->last_procs[qi];
